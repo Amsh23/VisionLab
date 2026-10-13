@@ -29,8 +29,17 @@ jobs:
           pip install -r requirements.txt
 
       - name: Check Python syntax
-        run: python -m compileall -q app.py
+        run: python -m compileall -q app.py resistor_analyzer.py scripts/generate_resistor_dataset.py tests
 
       - name: Check libraries
         run: |
           python -c "import cv2, numpy, streamlit, PIL, sklearn, matplotlib, pandas"
+
+      - name: Run resistor decoder tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke-test synthetic dataset generator
+        run: |
+          python scripts/generate_resistor_dataset.py --count 12 --output /tmp/resistor-dataset-smoke
+          test -f /tmp/resistor-dataset-smoke/labels.csv
+          test "$(find /tmp/resistor-dataset-smoke/images -type f | wc -l)" -eq 12
