@@ -347,7 +347,9 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     api_key=api_key,
                 )
                 with st.spinner("Sending the selected image for component detection..."):
-                    prediction_payload = client.infer(image_rgb, model_id=model_id)
+                    # Use OpenCV-style BGR input for NumPy image data.
+                    source_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+                    prediction_payload = client.infer(source_bgr, model_id=model_id)
                 predictions = prediction_payload.get("predictions", [])
                 annotated = image_rgb.copy()
                 records = []
