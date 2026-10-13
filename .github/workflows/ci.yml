@@ -42,7 +42,27 @@ jobs:
 
       - name: Check libraries
         run: |
-          python -c "import cv2, numpy, streamlit, PIL, sklearn, matplotlib, pandas, inference_sdk"
+          python - <<'PY'
+          import importlib.metadata as metadata
+
+          import cv2
+          import matplotlib
+          import numpy
+          import pandas
+          import PIL
+          import requests
+          import sklearn
+          import streamlit
+
+          metadata.version("opencv-python-headless")
+          try:
+              metadata.version("opencv-python")
+          except metadata.PackageNotFoundError:
+              pass
+          else:
+              raise SystemExit("Runtime must not install opencv-python alongside opencv-python-headless.")
+          print("Runtime imports succeeded; headless OpenCV is the only OpenCV wheel installed.")
+          PY
 
       - name: Smoke-test every Streamlit page
         run: |

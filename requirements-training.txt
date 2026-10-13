@@ -1,7 +1,7 @@
-# Runtime and training dependencies for VisionLab.
-# Headless OpenCV prevents GUI/native-library conflicts on Linux and Streamlit Cloud.
+# Local training dependencies for VisionLab (Python 3.12 recommended).
+# Ultralytics depends on opencv-python; production uses opencv-python-headless separately.
 streamlit
-opencv-python-headless==4.12.0.88
+opencv-python==4.12.0.88
 numpy==2.2.6
 matplotlib
 pillow
@@ -11,4 +11,3 @@ requests
 ultralytics>=8.3,<9
 roboflow>=1.1
 kaggle>=1.6
-inference-sdk>=0.9.30,<1

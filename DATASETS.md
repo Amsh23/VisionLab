@@ -32,7 +32,7 @@ This is a useful starting point, but 209 images is small. Evaluate with independ
 - **Source:** [Roboflow Universe — IoT Components Learning](https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq)
 - **Model ID:** `iot-components-learning-ogliq/1` (serverless inference API).
 - **Published model-card metrics:** mAP@50 94.3%, precision 93.1%, recall 93.8% across 58 classes. These are the publisher's reported metrics, not a VisionLab independent test.
-- **Usage:** the Streamlit analyzer calls this existing model through Roboflow's serverless inference SDK because the supplied `design-project-zeico/iot_dataset` has no hosted model (Model 0). Source page: https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq
+- **Usage:** the Streamlit analyzer calls this existing model through Roboflow's hosted HTTP inference API because the supplied `design-project-zeico/iot_dataset` has no hosted model (Models: 0). Source page: https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq
 
 ### 3. Resistor Value Determination (your supplied Roboflow source)
 
@@ -130,7 +130,7 @@ The existing synthetic resistor pictures are for code/tests only. They are not a
 
 ## Training setup (recommended on a PC, not Streamlit Cloud)
 
-Create a dedicated local environment for training and testing the local YOLO weights. This environment uses the same headless OpenCV wheel as the Streamlit requirements, and it includes Ultralytics so you can run the analyzer locally with the trained model.
+Create a dedicated local environment for training and testing the local YOLO weights. This local training environment uses the standard OpenCV wheel required by Ultralytics. The lightweight Streamlit deployment uses `opencv-python-headless` and does not install Ultralytics.
 
 ### Windows PowerShell
 

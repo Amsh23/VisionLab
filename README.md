@@ -41,7 +41,7 @@ Open **Electronic Component Analyzer** from the sidebar.
 
 ### Detect components in the full image
 
-The analyzer tries two hosted Roboflow models through the serverless inference SDK, uses a compatible detection endpoint as a fallback if needed, and merges overlapping same-class predictions. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
+The analyzer calls two hosted Roboflow object-detection endpoints directly over HTTPS, validates and normalizes their response payloads, and merges overlapping same-class predictions. This keeps the Streamlit runtime lightweight and avoids installing conflicting GUI and headless OpenCV wheels. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
 
 - **Electronics Components, version 7** — loose parts such as resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, cables, crystal oscillators, and potentiometers.
 - **IoT Components Learning, version 1** — an existing trained 58-class hosted model for Arduino boards, ESP32/ESP32-CAM, components, sensors, and modules. Its publisher reports mAP@50 94.3%; VisionLab has not independently reproduced that benchmark.

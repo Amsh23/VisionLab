@@ -6,4 +6,3 @@ pillow
 scikit-learn
 pandas
 requests
-inference-sdk>=0.9.30,<1

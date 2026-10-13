@@ -7,7 +7,6 @@ from pathlib import Path
 import csv
 import hashlib
 import importlib.util
-import tempfile
 
 import cv2
 import requests
@@ -601,7 +600,6 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     hosted_models = [
         {
             "id": "electronics-components-sveck/7",
-            "api_url": "https://serverless.roboflow.com",
             "label": "Hosted Electronics Components",
             "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
         },
@@ -610,7 +608,6 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             # so requesting /iot_dataset/2 from detect.roboflow.com returns HTTP 404.
             # Use this existing trained 58-class IoT/electronics model instead.
             "id": "iot-components-learning-ogliq/1",
-            "api_url": "https://serverless.roboflow.com",
             "label": "Hosted IoT Components",
             "source": "https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq",
         },
@@ -716,72 +713,30 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             f"{local_config['label']}: {type(error).__name__}"
                         )
 
-            # Hosted calls are optional and only use the secret already configured in Streamlit.
+            # Send the selected image to Roboflow's hosted HTTP prediction API.
             if api_key:
                 image_buffer = BytesIO()
                 Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
                 jpeg_bytes = image_buffer.getvalue()
                 for model_config in hosted_models:
                     try:
-                        if model_config.get("api_url") == "https://serverless.roboflow.com":
-                            # Prefer the current serverless SDK. Some hosted deployments may
-                            # return an unsupported wrapper or reject a transport setting, so
-                            # fall back to the compatibility endpoint that the legacy detector used.
-                            from inference_sdk import InferenceHTTPClient, InferenceConfiguration
+                        response = requests.post(
+                            f"https://detect.roboflow.com/{model_config['id']}",
+                            params={
+                                "api_key": api_key,
+                                "confidence": max(10, int(round(float(confidence_threshold) * 100))),
+                                "overlap": 35,
+                            },
+                            files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
+                            timeout=60,
+                        )
+                        response.raise_for_status()
+                        try:
+                            prediction_payload = response.json()
+                        except ValueError as error:
+                            raise ValueError("Roboflow returned a non-JSON inference response.") from error
+                        predictions = normalize_detection_predictions(prediction_payload)
 
-                            try:
-                                client = InferenceHTTPClient(
-                                    api_url=model_config["api_url"],
-                                    api_key=api_key,
-                                )
-                                client.configure(
-                                    InferenceConfiguration(api_key_transport="both")
-                                )
-                                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
-                                    image_file.write(jpeg_bytes)
-                                    image_path = image_file.name
-                                try:
-                                    prediction_payload = client.infer(
-                                        image_path,
-                                        model_id=model_config["id"],
-                                    )
-                                finally:
-                                    Path(image_path).unlink(missing_ok=True)
-                                predictions = normalize_detection_predictions(prediction_payload)
-                            except Exception as sdk_error:
-                                try:
-                                    response = requests.post(
-                                        f"https://detect.roboflow.com/{model_config['id']}",
-                                        params={
-                                            "api_key": api_key,
-                                            "confidence": max(10, int(round(float(confidence_threshold) * 100))),
-                                            "overlap": 35,
-                                        },
-                                        files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
-                                        timeout=60,
-                                    )
-                                    response.raise_for_status()
-                                    predictions = normalize_detection_predictions(response.json())
-                                except Exception as fallback_error:
-                                    sdk_detail = safe_error_summary(sdk_error, api_key)
-                                    fallback_detail = safe_error_summary(fallback_error, api_key)
-                                    raise RuntimeError(
-                                        f"Serverless inference failed ({sdk_detail}); "
-                                        f"compatibility endpoint failed ({fallback_detail})."
-                                    ) from None
-                        else:
-                            response = requests.post(
-                                f"https://detect.roboflow.com/{model_config['id']}",
-                                params={
-                                    "api_key": api_key,
-                                    "confidence": max(10, int(round(float(confidence_threshold) * 100))),
-                                    "overlap": 35,
-                                },
-                                files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
-                                timeout=60,
-                            )
-                            response.raise_for_status()
-                            predictions = normalize_detection_predictions(response.json())
                         for prediction in predictions:
                             try:
                                 class_name = str(
@@ -800,23 +755,13 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                                     center_x + box_width / 2,
                                     center_y + box_height / 2,
                                 ]
-                                add_prediction(
-                                    class_name,
-                                    confidence,
-                                    coords,
-                                    model_config["label"],
-                                )
+                                add_prediction(class_name, confidence, coords, model_config["label"])
                             except (TypeError, ValueError, OverflowError):
                                 continue
                     except requests.RequestException as error:
-                        status_code = getattr(getattr(error, "response", None), "status_code", None)
-                        detail = f"HTTP {status_code}" if status_code else "network request failed"
-                        model_errors.append(f"{model_config['label']}: {detail}")
+                        model_errors.append(f"{model_config['label']}: {safe_error_summary(error, api_key)}")
                     except Exception as error:
-                        # Show actionable response diagnostics but never expose the configured API key.
-                        model_errors.append(
-                            f"{model_config['label']}: {safe_error_summary(error, api_key)}"
-                        )
+                        model_errors.append(f"{model_config['label']}: {safe_error_summary(error, api_key)}")
 
         # Merge duplicate predictions only when their class names and boxes overlap.
         def box_iou(first, second):
