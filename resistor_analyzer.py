@@ -971,15 +971,15 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     model_root = Path(__file__).resolve().parent / "models"
     band_segmentation_path = model_root / "resistor_seg.pt"
     band_classifier_path = model_root / "resistor_band_classifier.joblib"
-    if band_segmentation_path.is_file():
-        automatic_mode_label = "Automatic color detection (trained segmentation model)"
-        default_band_mode = "Local YOLO segmentation model"
-    elif band_classifier_path.is_file():
+    if band_classifier_path.is_file():
         automatic_mode_label = "Automatic color detection (trained color classifier)"
-        default_band_mode = automatic_mode_label
     else:
         automatic_mode_label = "Automatic color detection (experimental)"
-        default_band_mode = automatic_mode_label
+    default_band_mode = (
+        "Local YOLO segmentation model"
+        if band_segmentation_path.is_file()
+        else automatic_mode_label
+    )
 
     mode_options = [
         automatic_mode_label,
