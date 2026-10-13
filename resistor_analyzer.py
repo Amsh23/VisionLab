@@ -853,8 +853,39 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     st.subheader("2. Configure Band Reading")
     p1, p2, p3 = st.columns(3)
     band_count = p1.selectbox("Resistor band count", [4, 5], index=0, format_func=lambda value: f"{value}-band resistor", key=f"res_band_count_{roi_key}")
-    mode = p2.selectbox("Band reading method", ["Automatic color detection (experimental)", "Manual color selection"], key=f"res_read_mode_{roi_key}")
+    mode = p2.selectbox(
+        "Band reading method",
+        [
+            "Local YOLO segmentation model",
+            "Automatic color detection (experimental)",
+            "Manual color selection",
+        ],
+        key=f"res_read_mode_{roi_key}",
+    )
     band_order = p3.selectbox("Read bands in this direction", ["Left to right", "Right to left"], key=f"res_band_order_{roi_key}")
+
+    band_model_path = "models/resistor_seg.pt"
+    band_model_confidence = 0.15
+    if mode == "Local YOLO segmentation model":
+        model_col, confidence_col = st.columns([2, 1])
+        band_model_path = model_col.text_input(
+            "Local segmentation weights",
+            value="models/resistor_seg.pt",
+            key=f"res_band_model_path_{roi_key}",
+            help="Use weights trained with band-color classes. A generic component detector may not predict individual band colors.",
+        )
+        band_model_confidence = confidence_col.slider(
+            "Model confidence",
+            min_value=0.05,
+            max_value=0.90,
+            value=0.15,
+            step=0.05,
+            key=f"res_band_model_confidence_{roi_key}",
+        )
+        st.caption(
+            "This mode requires a locally trained YOLO segmentation/detection model whose class names include resistor-band colors. "
+            "Download and prepare the semantic dataset using DATASETS.md before training."
+        )
 
     manual_bands: list[str] = []
     if mode == "Manual color selection":
@@ -890,6 +921,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     signature = (
         str(selected_token), crop_choice, int(x1), int(y1), int(x2), int(y2), transform,
         int(band_count), mode, band_order, tuple(manual_bands),
+        band_model_path if mode == "Local YOLO segmentation model" else None,
+        float(band_model_confidence) if mode == "Local YOLO segmentation model" else None,
     )
     signature_text = repr(signature)
     result_state_key = "resistor_analyzer_last_result"
@@ -904,6 +937,32 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 result["bands"] = bands
                 result["annotated"] = roi.copy()
                 result["decoded"] = decode_band_sequence(bands, int(band_count))
+            elif mode == "Local YOLO segmentation model":
+                runs, all_runs, model_predictions = detect_band_runs_yolo(
+                    roi,
+                    band_model_path,
+                    int(band_count),
+                    float(band_model_confidence),
+                )
+                physical_runs = sorted(runs, key=lambda run: run["center"])
+                read_runs = physical_runs if band_order == "Left to right" else list(reversed(physical_runs))
+                result["runs"] = physical_runs
+                result["all_candidate_count"] = len(all_runs)
+                result["model_predictions"] = model_predictions
+                result["bands"] = [run["color"] for run in read_runs]
+                result["annotated"] = annotate_bands(
+                    roi,
+                    physical_runs,
+                    [run["color"] for run in physical_runs],
+                )
+                if len(read_runs) != int(band_count):
+                    result["error"] = (
+                        f"The local model detected {len(read_runs)} color band(s), but {band_count} are required. "
+                        "Check that this model was trained on individual resistor-band colors, adjust confidence, "
+                        "or switch to Manual color selection."
+                    )
+                else:
+                    result["decoded"] = decode_band_sequence(result["bands"], int(band_count))
             else:
                 runs, all_runs = detect_band_runs(roi, int(band_count))
                 physical_runs = sorted(runs, key=lambda run: run["center"])
@@ -943,11 +1002,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         display_bands = suggested_bands.copy()
         corrected = False
 
-        if mode == "Automatic color detection (experimental)" and len(suggested_bands) == int(band_count):
+        if mode in ("Automatic color detection (experimental)", "Local YOLO segmentation model") and len(suggested_bands) == int(band_count):
             st.markdown("**Review or correct the detected colors**")
             st.caption(
-                "Lighting and camera white balance can affect color recognition. Review each band color; "
-                "the resistance value and formula below will be recalculated using your selections."
+                "Predicted band colors can still be wrong because of lighting, image quality, or model limitations. "
+                "Review each band color; the resistance value and formula below will be recalculated using your selections."
             )
             correction_hash = hashlib.sha256(signature_text.encode("utf-8")).hexdigest()[:10]
             correction_columns = st.columns(int(band_count))
@@ -972,11 +1031,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             corrected = display_bands != suggested_bands
         elif current_result.get("error"):
             st.caption(
-                "If automatic detection is incomplete, switch to Manual color selection and choose each band color."
+                "If the selected model does not predict individual band colors, train a band-color segmentation model or use Manual color selection."
             )
 
         annotated = current_result.get("annotated", roi)
-        if mode == "Automatic color detection (experimental)" and len(display_bands) == int(band_count):
+        if mode in ("Automatic color detection (experimental)", "Local YOLO segmentation model") and len(display_bands) == int(band_count):
             physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
             if len(physical_runs) == int(band_count):
                 physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
@@ -1034,6 +1093,19 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
             if corrected:
                 st.info("The corrected band colors were used to calculate the result.")
+            if current_result.get("model_predictions"):
+                st.caption("Additional model classes in this crop:")
+                st.dataframe(
+                    [
+                        {
+                            "Predicted class": item["class"],
+                            "Confidence": f"{item['confidence']:.0%}",
+                        }
+                        for item in current_result["model_predictions"]
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
             if current_result.get("error"):
                 st.warning(current_result["error"])
 
