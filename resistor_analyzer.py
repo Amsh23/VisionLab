@@ -678,24 +678,26 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     with st.expander("Datasets, training, and model limitations"):
         st.markdown(
-            "- **Component detection:** [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck), approximately 8,248 images and 10 classes. The source page lists CC BY 4.0.\n"
-            "- **IoT board recognition:** [IoTKITs on Mendeley Data](https://data.mendeley.com/datasets/x5thzmkxhy/1), 3,200 annotated images across 32 educational kit/board classes, including Arduino, ESP32, and Raspberry Pi. The source page lists CC BY 4.0.\n"
-            "- Full datasets are downloaded locally and are intentionally not committed to this repository. See the English [DATASETS.md training guide](https://github.com/Amsh23/VisionLab/blob/main/DATASETS.md) for source attribution, installation, download, conversion, and training steps.\n"
-            "- Use separate models for loose electronic components and development boards. A generic object detector finds objects; it does not decode resistor bands or calculate resistance by itself.\n"
-            "- The hosted Roboflow detector is a third-party model. Local YOLO mode requires your own compatible weights file and the optional training dependencies."
+            "- **General components:** [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck), approximately 8,248 images and 10 classes (CC BY 4.0 on the source page).\n"
+            "- **IoT parts:** [IoT_Dataset](https://universe.roboflow.com/design-project-zeico/iot_dataset), 209 images and seven classes, including Arduino, Resistor, Transistor, and Ultrasonic Sensor (MIT on the source page).\n"
+            "- **Resistor segmentation:** [Resistor Value Determination](https://universe.roboflow.com/resistor-color-code/resistor-value-determination), semantic segmentation with color/value labels (CC BY 4.0). Its model page reports 5.9% mIoU, so do not treat the hosted model as accurate ground truth.\n"
+            "- **Kaggle resistor masks:** [Resistor Images Dataset for Segmentation](https://www.kaggle.com/datasets/alptugaydin/resistor-images-dataset-for-segmentation). Configure Kaggle access and review its current license before reuse or redistribution.\n"
+            "- **Additional IoT boards:** [IoTKITs on Mendeley Data](https://data.mendeley.com/datasets/x5thzmkxhy/1), 3,200 annotated images across 32 educational kit/board classes (CC BY 4.0 on the source page).\n"
+            "- See [DATASETS.md](https://github.com/Amsh23/VisionLab/blob/main/DATASETS.md) for source attribution and complete instructions. Large datasets and model weights are stored locally, not in normal Git history.\n"
+            "- Keep object detection and semantic segmentation as separate tasks. A generic YOLO detector does not automatically decode resistor color bands or calculate resistance."
         )
         st.code(
             "python -m pip install -r requirements-training.txt\n"
-            "python scripts/download_component_dataset.py\n"
-            "python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 60 --weights-out models/components.pt\n"
-            "python scripts/download_iotkits_dataset.py\n"
-            "python scripts/prepare_iotkits_yolo.py\n"
-            "python scripts/train_components_yolo.py --data data/iotkits_yolo/data.yaml --name iot_boards --weights-out models/iot_boards.pt",
-            language="bash",
+            "$env:ROBOFLOW_API_KEY=\"YOUR_ROBOFLOW_API_KEY\"\n"
+            "python scripts/download_roboflow_dataset.py --dataset iot\n"
+            "python scripts/train_components_yolo.py --data data/iot_roboflow/data.yaml --name iot_parts --weights-out models/iot_components.pt\n"
+            "python scripts/download_roboflow_dataset.py --dataset resistor-segmentation\n"
+            "python scripts/download_kaggle_resistor_dataset.py",
+            language="powershell",
         )
         st.caption(
-            "Run training in a dedicated local environment, not in the Streamlit Cloud app environment. "
-            "Keep raw datasets and large model weights out of normal Git history; preserve the source license and citation."
+            "Use the training environment on a PC, not inside Streamlit Cloud. "
+            "The resistor semantic-segmentation export needs a compatible segmentation trainer; do not train it with the default detection model."
         )
     # endregion
 
