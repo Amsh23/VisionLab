@@ -29,7 +29,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Check Python syntax
-        run: python -m compileall -q app.py resistor_analyzer.py scripts/generate_resistor_dataset.py tests
+        run: python -m compileall -q app.py resistor_analyzer.py scripts tests
 
       - name: Check libraries
         run: |
