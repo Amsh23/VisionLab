@@ -41,7 +41,7 @@ Open **Electronic Component Analyzer** from the sidebar.
 
 ### Detect components in the full image
 
-The analyzer runs two hosted Roboflow models through the serverless inference SDK and merges overlapping same-class predictions. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
+The analyzer tries two hosted Roboflow models through the serverless inference SDK, uses a compatible detection endpoint as a fallback if needed, and merges overlapping same-class predictions. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
 
 - **Electronics Components, version 7** — loose parts such as resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, cables, crystal oscillators, and potentiometers.
 - **IoT Components Learning, version 1** — an existing trained 58-class hosted model for Arduino boards, ESP32/ESP32-CAM, components, sensors, and modules. Its publisher reports mAP@50 94.3%; VisionLab has not independently reproduced that benchmark.
@@ -68,7 +68,7 @@ The current local electronics checkpoint is an **experimental baseline**, not a 
 
 **Important:** Streamlit Community Cloud secrets and GitHub Actions secrets are separate. Your `ROBOFLOW_API_KEY` inside Streamlit is not automatically exposed to GitHub Actions. To train from the supplied Roboflow datasets and publish local weights, add the same key under **GitHub → Settings → Secrets and variables → Actions** as `ROBOFLOW_API_KEY`. Never commit the key in a file.
 
-Raw datasets remain excluded from Git. The workflow publishes compact trained checkpoints only, so Streamlit can load them after its next deployment/restart. Training is not complete until the GitHub Actions run is green and the resulting model files appear in `models/`.
+Raw datasets remain excluded from Git. The workflow publishes compact trained checkpoints to `models/` for reproducible local experiments. The lightweight Streamlit Cloud requirements intentionally omit Ultralytics, so publishing a `.pt` file alone does not enable local inference in that deployment; local YOLO inference requires an environment with `ultralytics` installed and the experimental-model option enabled. Training is not complete until the GitHub Actions run is green and the expected model file appears in `models/`.
 
 ### Run training locally
 
@@ -168,7 +168,7 @@ A detector finding a resistor does **not** automatically measure its resistance.
 
 If the app already exists and it was deployed with Python 3.14, Community Cloud requires deleting and redeploying the app to change its Python version. Save its URL/subdomain and secrets first, then select Python 3.12 in Advanced settings during redeployment. See [Streamlit's Python-version instructions](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/upgrade-python).
 
-The image-processing modules work without the Roboflow key. Hosted inference needs the Streamlit secret and network access. Local electronics/IoT detection loads any trained checkpoints in `models/`; resistor band recognition uses the trained patch classifier when available or the dedicated segmentation checkpoint when one has been trained. A synthetic-only color classifier is a baseline, not a validated real-photo model.
+The image-processing modules work without the Roboflow key. Hosted inference needs the Streamlit secret and network access. Local electronics/IoT checkpoints in `models/` are used only when Ultralytics is installed and the experimental-model option is enabled; the lightweight Streamlit Cloud install does not include Ultralytics. Resistor band recognition uses the local patch classifier when available or a dedicated segmentation checkpoint when one has been trained. Synthetic-only color metrics are not evidence of accuracy on real photographs.
 
 ## Public dataset and license
 

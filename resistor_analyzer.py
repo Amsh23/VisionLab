@@ -643,8 +643,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     if not can_run_detection:
         st.error(
-            "No detector is ready yet. Add ROBOFLOW_API_KEY under Streamlit secrets, "
-            "or deploy a trained checkpoint in the models/ directory."
+            "No hosted detector is configured. Add ROBOFLOW_API_KEY under Streamlit app settings, "
+            "or run locally with Ultralytics installed and a trained checkpoint enabled."
         )
     run_detection = st.button(
         "Detect Electronic and IoT Components",

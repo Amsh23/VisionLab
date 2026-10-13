@@ -130,7 +130,7 @@ The existing synthetic resistor pictures are for code/tests only. They are not a
 
 ## Training setup (recommended on a PC, not Streamlit Cloud)
 
-Create a dedicated local environment for training and testing the local YOLO weights. This environment uses opencv-python rather than the headless OpenCV wheel in the Streamlit Cloud requirements, and it includes Streamlit so you can run the analyzer locally with the trained model.
+Create a dedicated local environment for training and testing the local YOLO weights. This environment uses the same headless OpenCV wheel as the Streamlit requirements, and it includes Ultralytics so you can run the analyzer locally with the trained model.
 
 ### Windows PowerShell
 
@@ -192,7 +192,7 @@ If training memory is limited, reduce `--batch` to `4` or `2`. A GPU is recommen
 
 ## Use your trained model
 
-Run VisionLab from a machine where the weights file exists. The main Electronic Component Analyzer calls `electronics-components-sveck/7` and `iot_dataset/2` automatically through hosted inference. There is no model-backend selector in that view.
+Run VisionLab from a machine where the weights file exists. The main Electronic Component Analyzer calls `electronics-components-sveck/7` and the trained hosted model `iot-components-learning-ogliq/1` through Roboflow, provided `ROBOFLOW_API_KEY` is configured in Streamlit secrets. The supplied `iot_dataset` is a dataset-only project and cannot be used as a hosted inference model. There is no API-key or model-backend selector in that view.
 
 These separate weights remain useful for local experiments:
 
@@ -201,7 +201,7 @@ These separate weights remain useful for local experiments:
 - **models/iot_boards.pt** for the separate IoTKITs board/kit labels.
 - **models/resistor_seg.pt** for a YOLO segmentation model trained on converted resistor masks; select it in the resistor reader's `Local YOLO segmentation model` method.
 
-Raw datasets and generated model weights are not committed by default because they can make the Git history large and may have redistribution requirements. The download scripts keep datasets local and preserve source attribution. For an offline deployed detector, train a model separately and deliberately arrange model hosting/versioning; hosted inference does not train a model on the downloaded data.
+Raw datasets and locally generated model weights are ignored by default because they can make Git history large and may have redistribution requirements; the training workflow deliberately publishes only its allowlisted checkpoints. The download scripts keep raw datasets local and preserve source attribution. For an offline deployed detector, run in an environment with the required inference runtime and deliberately arrange model hosting/versioning; hosted inference does not train a model on downloaded data.
 
 ## Resistor color recognition is a different task
 
