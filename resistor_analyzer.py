@@ -864,8 +864,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     mode = p2.selectbox(
         "Band reading method",
         [
-            "Local YOLO segmentation model",
             "Automatic color detection (experimental)",
+            "Local YOLO segmentation model",
             "Manual color selection",
         ],
         key=f"res_read_mode_{roi_key}",
