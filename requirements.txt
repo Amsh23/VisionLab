@@ -5,3 +5,5 @@ matplotlib
 pillow
 scikit-learn
 pandas
+inference-sdk
+
