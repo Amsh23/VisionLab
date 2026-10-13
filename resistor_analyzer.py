@@ -1116,15 +1116,21 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     width="stretch",
                     hide_index=True,
                 )
-            if current_result.get("error"):
-                st.warning(current_result["error"])
 
             decoded = None
+            decode_error = None
             if len(display_bands) == int(band_count):
                 try:
                     decoded = decode_band_sequence(display_bands, int(band_count))
                 except ValueError as error:
-                    st.warning(f"The selected colors do not form a valid resistor code: {error}")
+                    decode_error = str(error)
+
+            if decode_error:
+                st.warning(f"The selected colors do not form a valid resistor code: {decode_error}")
+            elif current_result.get("error") and not decoded:
+                st.warning(current_result["error"])
+            elif current_result.get("error") and decoded and corrected:
+                st.info("The initial automatic prediction was invalid, but the corrected color sequence forms a valid resistor code.")
 
             if decoded:
                 st.metric("Estimated resistance", format_resistance(decoded["ohms"]))
