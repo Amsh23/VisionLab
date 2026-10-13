@@ -18,6 +18,8 @@ The rest of VisionLab's OpenCV filters, feature matching, segmentation, video, a
 
 **Project-specific contribution:** integrating component detection with an interactive resistor-reading workflow and understandable code explanations. The hosted component detector is a third-party Roboflow model; the project does not claim to have trained that hosted model from scratch. Automatic color reading is a classical OpenCV heuristic, so the displayed value is an estimate and should be checked with a multimeter when accuracy matters.
 
+**Model training:** the repository includes repeatable download/prepare/train scripts for a general electronic-components dataset and a separate IoT development-board dataset. See [DATASETS.md](DATASETS.md). Large raw image archives and trained weights are kept out of ordinary Git history by default.
+
 ## Run locally
 
 ```bash
@@ -54,44 +56,45 @@ No API key is committed to this repository.
 
 ### Local detector and custom training
 
-If you prefer not to send images to a hosted service, download the public dataset and train your own local YOLO weights. The full dataset is intentionally not committed to this repository because it contains thousands of images and should be downloaded/exported from its source, with license attribution preserved.
-
-Optional local training dependencies:
-
-```bash
-python -m pip install roboflow ultralytics
-```
-
-Set an environment variable rather than putting the API key directly in source code:
+Training is optional and should be done on a PC, not in the Streamlit Cloud app environment. Use a dedicated training environment because Ultralytics installs `opencv-python`, while the deployed app uses `opencv-python-headless`.
 
 **Windows PowerShell**
 ```powershell
+py -3.12 -m venv .venv-train
+.\.venv-train\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements-training.txt
+```
+
+**Train a detector for loose electronic components**
+```powershell
 $env:ROBOFLOW_API_KEY="your_roboflow_api_key"
 python scripts/download_component_dataset.py
+python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --weights-out models/components.pt
 ```
 
-**macOS / Linux**
-```bash
-export ROBOFLOW_API_KEY="your_roboflow_api_key"
-python scripts/download_component_dataset.py
+**Train a separate detector for IoT boards and educational kits**
+```powershell
+python scripts/download_iotkits_dataset.py
+python scripts/prepare_iotkits_yolo.py
+python scripts/train_components_yolo.py --data data/iotkits_yolo/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --name iot_boards --weights-out models/iot_boards.pt
 ```
 
-Then train a small model (GPU recommended):
+See [DATASETS.md](DATASETS.md) for the dataset list, licenses, citations, download instructions, supported annotation formats, and troubleshooting. Raw datasets and model weights are ignored by Git by default to avoid large repository history. Keep separate models for the separate tasks.
 
-```bash
-python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 40
-```
-
-After training, copy the generated best.pt file to `models/components.pt` and select **Local YOLO weights** inside the app. The detector needs a compatible model file; the application does not silently download model weights.
+After training, open **Electronic Component Analyzer → Detection backend → Local YOLO weights** and enter `models/components.pt` for loose parts or `models/iot_boards.pt` for development boards. The file must exist in the environment running the app. Streamlit Cloud will not receive ignored local weights automatically; provide them intentionally through model storage or version a suitably small model separately.
 
 ## Dataset contents in this repository
 
 - `data/resistor_color_reference.csv`: resistor band digits, multipliers, and tolerances.
 - `data/synthetic_resistors/images/` and `data/synthetic_resistors/labels.csv`: 12 small synthetic examples to demonstrate the label format. They are generated illustrations, not real photographs of electronic components.
 - `scripts/generate_resistor_dataset.py`: generate more synthetic resistor images for pipeline demonstrations.
-- `scripts/download_component_dataset.py`: download the real public component dataset from Roboflow with your account key.
-- `scripts/train_components_yolo.py`: train a local object detector.
-- `resistor_analyzer.py`: webcam capture, whole-scene detection, and color-band value estimation.
+- `DATASETS.md`: public component and IoT-board datasets, licensing notes, and end-to-end training commands.
+- `scripts/download_component_dataset.py`: download the electronics-components dataset from Roboflow with your account key.
+- `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
+- `scripts/prepare_iotkits_yolo.py`: convert supported IoTKITs JSON/polygon annotations to YOLO format.
+- `scripts/train_components_yolo.py`: train a local YOLO detector and copy its best weights to a configurable destination.
+- `resistor_analyzer.py`: webcam capture, whole-scene detection, and resistor color-band value estimation.
 
 A detector finding a resistor does **not** automatically measure its resistance. The crop reader estimates resistance from visible 4-band or 5-band colors using an adaptive Lab-contrast scan and HSV color estimates. Automatic colors can be reviewed/corrected individually; the results display each band's digit, multiplier or tolerance, the resistance formula, expected range, and a short component-use explanation. Use a tight crop, even lighting, and no direct flash glare. Because similar colors can still be confused under real camera conditions, check important resistor values with a multimeter.
 
