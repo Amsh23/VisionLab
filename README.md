@@ -39,20 +39,20 @@ Open **Electronic Component Analyzer** from the sidebar.
 
 ### Detect components in the full image
 
-The recommended detector is the hosted Roboflow model **electronics-components-sveck/7**. The project's dataset page currently lists classes such as resistor, capacitor, diode, inductor, transistor, IC, LED, cable, crystal oscillator, and potentiometer. The published dataset page lists CC BY 4.0. Model performance figures shown on third-party pages are not guarantees for images from your desk. The dataset/model may work best on images similar to its training data, so verify results on your own camera and setup.
+The analyzer automatically runs two hosted Roboflow models and merges overlapping same-class predictions:
 
-To use the hosted model:
+- **Electronics Components, version 7** — loose parts such as resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, cables, crystal oscillators, and potentiometers.
+- **IoT Dataset, version 2** — a complementary set of IoT devices and learning components, including Arduino, jumper wires, resistors, transistors, capacitors, and an ultrasonic sensor.
 
-1. Create a Roboflow account and obtain your API key at https://app.roboflow.com/settings/api.
-2. Run locally and paste the key into the password field, or add it to Streamlit Community Cloud under **App settings → Secrets**:
+These are separate model classes and are not a universal detector for every electronic part. Their accuracy depends on image quality and similarity to their training images. Test with independent photos from your own setup; no accuracy guarantee is implied.
+
+The app reads the existing secret from Streamlit Community Cloud. Configure it once under **App settings → Secrets**:
 
 ```toml
 ROBOFLOW_API_KEY = "your_roboflow_api_key"
 ```
 
-3. The selected image is sent to the hosted model for inference. Do not upload confidential images, and check the provider's current terms and quota.
-
-No API key is committed to this repository.
+There is no API-key input in the user interface. The selected image is sent to both hosted inference endpoints. Do not upload confidential images, and check Roboflow's current terms and quota. The key is never stored in this repository or printed into inference errors.
 
 ### Local detector and custom training
 
@@ -104,7 +104,7 @@ Configure Kaggle API access first and inspect the annotation files and license a
 
 See [DATASETS.md](DATASETS.md) for all three sources, licenses, citations, download instructions, formats, and troubleshooting. Raw datasets and model weights are ignored by Git by default to avoid large repository history.
 
-After training, open **Electronic Component Analyzer → Detection backend → Local YOLO weights** and enter the relevant local weights path. The file must exist in the environment running the app. Streamlit Cloud will not receive ignored local weights automatically; provide them intentionally through model storage or version a suitably small model separately.
+The main Electronic Component Analyzer uses the two hosted Roboflow models by default and does not expose a backend or API-key selector. The local training scripts are for experimentation on a PC; they do not automatically replace the hosted models in Streamlit Cloud. The separate **Object Detection (YOLO)** learning module can run a local weights file when Ultralytics is installed and the file is present in the app environment.
 
 ## Dataset contents in this repository
 
