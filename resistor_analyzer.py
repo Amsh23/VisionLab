@@ -724,27 +724,51 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 for model_config in hosted_models:
                     try:
                         if model_config.get("api_url") == "https://serverless.roboflow.com":
-                            # Current Roboflow-hosted models use the serverless inference SDK.
+                            # Prefer the current serverless SDK. Some hosted deployments may
+                            # return an unsupported wrapper or reject a transport setting, so
+                            # fall back to the compatibility endpoint that the legacy detector used.
                             from inference_sdk import InferenceHTTPClient, InferenceConfiguration
 
-                            client = InferenceHTTPClient(
-                                api_url=model_config["api_url"],
-                                api_key=api_key,
-                            )
-                            # "both" supports older and newer hosted inference deployments.
-                            client.configure(
-                                InferenceConfiguration(api_key_transport="both")
-                            )
-                            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
-                                image_file.write(jpeg_bytes)
-                                image_path = image_file.name
                             try:
-                                prediction_payload = client.infer(
-                                    image_path,
-                                    model_id=model_config["id"],
+                                client = InferenceHTTPClient(
+                                    api_url=model_config["api_url"],
+                                    api_key=api_key,
                                 )
-                            finally:
-                                Path(image_path).unlink(missing_ok=True)
+                                client.configure(
+                                    InferenceConfiguration(api_key_transport="both")
+                                )
+                                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
+                                    image_file.write(jpeg_bytes)
+                                    image_path = image_file.name
+                                try:
+                                    prediction_payload = client.infer(
+                                        image_path,
+                                        model_id=model_config["id"],
+                                    )
+                                finally:
+                                    Path(image_path).unlink(missing_ok=True)
+                                predictions = normalize_detection_predictions(prediction_payload)
+                            except Exception as sdk_error:
+                                try:
+                                    response = requests.post(
+                                        f"https://detect.roboflow.com/{model_config['id']}",
+                                        params={
+                                            "api_key": api_key,
+                                            "confidence": max(10, int(round(float(confidence_threshold) * 100))),
+                                            "overlap": 35,
+                                        },
+                                        files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
+                                        timeout=60,
+                                    )
+                                    response.raise_for_status()
+                                    predictions = normalize_detection_predictions(response.json())
+                                except Exception as fallback_error:
+                                    sdk_detail = safe_error_summary(sdk_error, api_key)
+                                    fallback_detail = safe_error_summary(fallback_error, api_key)
+                                    raise RuntimeError(
+                                        f"Serverless inference failed ({sdk_detail}); "
+                                        f"compatibility endpoint failed ({fallback_detail})."
+                                    ) from None
                         else:
                             response = requests.post(
                                 f"https://detect.roboflow.com/{model_config['id']}",
@@ -757,8 +781,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                                 timeout=60,
                             )
                             response.raise_for_status()
-                            prediction_payload = response.json()
-                        predictions = normalize_detection_predictions(prediction_payload)
+                            predictions = normalize_detection_predictions(response.json())
                         for prediction in predictions:
                             try:
                                 class_name = str(
