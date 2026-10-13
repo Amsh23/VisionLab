@@ -56,6 +56,15 @@ Review the converter's sample counts, class names, and generated labels before t
 
 The archive's exact annotation structure must be inspected after download. A folder of images alone is not a segmentation dataset; each image must have a matching verified mask or annotation.
 
+If the archive contains single-channel or indexed-PNG masks that pair with images by filename stem, try the same converter after inspecting the printed file inventory:
+
+~~~powershell
+python scripts/prepare_resistor_segmentation_yolo.py --input data/resistor_kaggle_raw --output data/resistor_kaggle_yolo --background-value 0
+python scripts/train_components_yolo.py --data data/resistor_kaggle_yolo/data.yaml --model yolo11n-seg.pt --epochs 80 --imgsz 640 --batch 4 --name kaggle_resistor_bands --weights-out models/kaggle_resistor_seg.pt
+~~~
+
+The converter will stop if it cannot find valid image/mask pairs. If the Kaggle dataset uses a different annotation format, do not rename arbitrary files to look like masks; inspect the actual format and write an appropriate converter first.
+
 ### 5. IoTKITs (IoT boards and educational kits)
 
 - **Source:** [Mendeley Data — IoTKITs](https://data.mendeley.com/datasets/x5thzmkxhy/1)
