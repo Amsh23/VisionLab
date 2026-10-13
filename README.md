@@ -73,16 +73,31 @@ python scripts/download_component_dataset.py
 python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --weights-out models/components.pt
 ```
 
-**Train a separate detector for IoT boards and educational kits**
+**Train a detector using the IoT_Dataset you supplied**
 ```powershell
-python scripts/download_iotkits_dataset.py
-python scripts/prepare_iotkits_yolo.py
-python scripts/train_components_yolo.py --data data/iotkits_yolo/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --name iot_boards --weights-out models/iot_boards.pt
+$env:ROBOFLOW_API_KEY="your_roboflow_api_key"
+python scripts/download_roboflow_dataset.py --dataset iot
+python scripts/train_components_yolo.py --data data/iot_roboflow/data.yaml --model yolo11n.pt --epochs 100 --imgsz 640 --batch 8 --name iot_parts --weights-out models/iot_components.pt
 ```
 
-See [DATASETS.md](DATASETS.md) for the dataset list, licenses, citations, download instructions, supported annotation formats, and troubleshooting. Raw datasets and model weights are ignored by Git by default to avoid large repository history. Keep separate models for the separate tasks.
+**Download the resistor semantic-segmentation dataset**
+```powershell
+$env:ROBOFLOW_API_KEY="your_roboflow_api_key"
+python scripts/download_roboflow_dataset.py --dataset resistor-segmentation
+```
 
-After training, open **Electronic Component Analyzer → Detection backend → Local YOLO weights** and enter `models/components.pt` for loose parts or `models/iot_boards.pt` for development boards. The file must exist in the environment running the app. Streamlit Cloud will not receive ignored local weights automatically; provide them intentionally through model storage or version a suitably small model separately.
+That export contains semantic masks, not ordinary bounding boxes. Inspect the masks and class mapping before selecting a compatible segmentation training pipeline; do not feed it to the ordinary object detector by default.
+
+**Download the Kaggle resistor segmentation dataset**
+```powershell
+python scripts/download_kaggle_resistor_dataset.py
+```
+
+Configure Kaggle API access first and inspect the annotation files and license after download.
+
+See [DATASETS.md](DATASETS.md) for all three sources, licenses, citations, download instructions, formats, and troubleshooting. Raw datasets and model weights are ignored by Git by default to avoid large repository history.
+
+After training, open **Electronic Component Analyzer → Detection backend → Local YOLO weights** and enter the relevant local weights path. The file must exist in the environment running the app. Streamlit Cloud will not receive ignored local weights automatically; provide them intentionally through model storage or version a suitably small model separately.
 
 ## Dataset contents in this repository
 
@@ -90,7 +105,9 @@ After training, open **Electronic Component Analyzer → Detection backend → L
 - `data/synthetic_resistors/images/` and `data/synthetic_resistors/labels.csv`: 12 small synthetic examples to demonstrate the label format. They are generated illustrations, not real photographs of electronic components.
 - `scripts/generate_resistor_dataset.py`: generate more synthetic resistor images for pipeline demonstrations.
 - `DATASETS.md`: public component and IoT-board datasets, licensing notes, and end-to-end training commands.
-- `scripts/download_component_dataset.py`: download the electronics-components dataset from Roboflow with your account key.
+- `scripts/download_component_dataset.py`: download the larger general-components dataset from Roboflow.
+- `scripts/download_roboflow_dataset.py`: download the supplied Roboflow IoT or resistor-segmentation datasets.
+- `scripts/download_kaggle_resistor_dataset.py`: download and inventory the Kaggle resistor-segmentation archive.
 - `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
 - `scripts/prepare_iotkits_yolo.py`: convert supported IoTKITs JSON/polygon annotations to YOLO format.
 - `scripts/train_components_yolo.py`: train a local YOLO detector and copy its best weights to a configurable destination.
