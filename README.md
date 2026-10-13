@@ -77,7 +77,7 @@ After training, copy the generated best.pt file to `models/components.pt` and se
 - `scripts/train_components_yolo.py`: train a local object detector.
 - `resistor_analyzer.py`: webcam capture, whole-scene detection, and color-band value estimation.
 
-A detector finding a resistor does **not** automatically measure its resistance. The crop reader estimates resistance from visible 4-band or 5-band colors, and its automatic color detector is heuristic. Use a close, well-lit image. Always check important resistor values with a multimeter.
+A detector finding a resistor does **not** automatically measure its resistance. The crop reader estimates resistance from visible 4-band or 5-band colors using an adaptive Lab-contrast scan and HSV color estimates. Automatic colors can be reviewed/corrected individually; the results display each band's digit, multiplier or tolerance, the resistance formula, expected range, and a short component-use explanation. Use a tight crop, even lighting, and no direct flash glare. Because similar colors can still be confused under real camera conditions, check important resistor values with a multimeter.
 
 ## Deploy to Streamlit Community Cloud
 
