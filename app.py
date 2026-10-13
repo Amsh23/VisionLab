@@ -1102,7 +1102,8 @@ elif page == "Object Detection (YOLO)":
                 if not Path(weights).is_file():
                     raise FileNotFoundError(f"Model weights do not exist: {weights}")
                 model = YOLO(weights)
-                predictions = model.predict(source=image, conf=float(confidence), verbose=False)
+                source_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                predictions = model.predict(source=source_bgr, conf=float(confidence), verbose=False)
                 prediction = predictions[0]
                 plotted_bgr = prediction.plot()
                 plotted_rgb = cv2.cvtColor(plotted_bgr, cv2.COLOR_BGR2RGB)
