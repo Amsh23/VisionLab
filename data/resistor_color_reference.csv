@@ -1,0 +1,13 @@
+Color,Digit,Multiplier_Ohms,Tolerance_Percent,Reference_RGB
+Black,0,1,,#232323
+Brown,1,10,1,#7D4B2D
+Red,2,100,2,#D72D2D
+Orange,3,1000,,#EB7D1E
+Yellow,4,10000,,#F5D72D
+Green,5,100000,0.5,#239146
+Blue,6,1000000,0.25,#285FD2
+Violet,7,10000000,0.1,#8741AA
+Gray,8,100000000,0.05,#878787
+White,9,1000000000,,#F2F0E1
+Gold,,0.1,5,#BE9B46
+Silver,,0.01,10,#BEC3C8
