@@ -721,6 +721,10 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     with preview_right:
         st.image(roi, caption="Selected resistor crop", width="stretch")
     st.caption(f"Crop size: {roi.shape[1]} × {roi.shape[0]} pixels.")
+    st.caption(
+        "برای نتیجه بهتر: فقط یک مقاومت را در کادر بگیر، نوارها واضح و عمودی باشند، "
+        "بازتاب مستقیم فلاش روی بدنه نباشد و خود مقاومت تا حد امکان افقی باشد."
+    )
 
     st.subheader("2. Configure Band Reading")
     p1, p2, p3 = st.columns(3)
@@ -947,10 +951,12 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     with st.expander("How this module works and example Python code"):
         st.write(
-            "The automatic mode converts the crop from RGB to HSV, classifies likely color pixels, "
-            "looks for narrow vertical color runs, and maps the resulting band sequence to standard "
-            "resistor-code values. Camera white balance and lighting can cause incorrect band labels, "
-            "so manual selection is included as a fallback."
+            "Automatic mode scans a narrow center strip, compares a Lab-color profile with a smoothed "
+            "local baseline to locate narrow bands, and then estimates each band's color from HSV hue, "
+            "saturation, and brightness relative to the resistor body. The UI lets you correct every "
+            "suggested color before recalculating the code. Strong glare, a loose crop, unusual body "
+            "colors, or similar-looking brown/red/orange and gold/yellow bands can still confuse a "
+            "classical color heuristic; use manual selection or a multimeter to verify important values."
         )
         st.code(
             "digits = int(''.join(str(DIGIT_VALUES[c]) for c in digit_bands))\n"
