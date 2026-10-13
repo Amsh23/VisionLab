@@ -15,6 +15,8 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
+from hosted_inference import normalize_detection_predictions, safe_error_summary
+
 try:
     from resistor_band_classifier import predict_band_color, load_trained_band_classifier
 except Exception:
@@ -558,15 +560,25 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         {"path": model_root / "iot_components.pt", "label": "Trained IoT Model"},
         {"path": model_root / "iot_boards.pt", "label": "Trained IoT Board Model"},
     ]
-    use_experimental_local_models = st.checkbox(
-        "Include experimental local checkpoints",
-        value=False,
-        help=(
-            "Off by default: the early CI-trained local checkpoint has not yet passed "
-            "real-image validation. The app uses the published hosted detectors instead."
-        ),
-        key="include_experimental_local_checkpoints",
-    )
+    local_runtime_available = importlib.util.find_spec("ultralytics") is not None
+    if local_runtime_available:
+        use_experimental_local_models = st.checkbox(
+            "Include experimental local checkpoints",
+            value=False,
+            help=(
+                "Off by default: the early CI-trained local checkpoint has not yet passed "
+                "real-image validation. The app uses the published hosted detectors instead."
+            ),
+            key="include_experimental_local_checkpoints",
+        )
+    else:
+        use_experimental_local_models = False
+        if any(item["path"].is_file() for item in candidate_local_models):
+            st.caption(
+                "Local YOLO checkpoint files are present, but this lightweight Streamlit "
+                "deployment does not install Ultralytics. Hosted detectors are used instead."
+            )
+
     available_local_models = (
         [
             item for item in candidate_local_models
@@ -626,7 +638,6 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         api_key_fingerprint,
     )
     result_key = "components_full_scene_result"
-    local_runtime_available = importlib.util.find_spec("ultralytics") is not None
     can_run_local = bool(available_local_models) and local_runtime_available
     can_run_detection = bool(api_key) or can_run_local
 
@@ -635,12 +646,6 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "No detector is ready yet. Add ROBOFLOW_API_KEY under Streamlit secrets, "
             "or deploy a trained checkpoint in the models/ directory."
         )
-    elif available_local_models and not local_runtime_available:
-        st.warning(
-            "Local model files were found, but Ultralytics is not installed. "
-            "Install the project dependencies again to enable local inference."
-        )
-
     run_detection = st.button(
         "Detect Electronic and IoT Components",
         type="primary",
@@ -725,8 +730,10 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             client = InferenceHTTPClient(
                                 api_url=model_config["api_url"],
                                 api_key=api_key,
-                            ).configure(
-                                InferenceConfiguration(api_key_transport="header")
+                            )
+                            # "both" supports older and newer hosted inference deployments.
+                            client.configure(
+                                InferenceConfiguration(api_key_transport="both")
                             )
                             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
                                 image_file.write(jpeg_bytes)
@@ -751,11 +758,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             )
                             response.raise_for_status()
                             prediction_payload = response.json()
-                        if not isinstance(prediction_payload, dict):
-                            raise ValueError("invalid JSON object")
-                        predictions = prediction_payload.get("predictions", [])
-                        if not isinstance(predictions, list):
-                            raise ValueError("invalid predictions list")
+                        predictions = normalize_detection_predictions(prediction_payload)
                         for prediction in predictions:
                             try:
                                 class_name = str(
@@ -786,14 +789,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                         status_code = getattr(getattr(error, "response", None), "status_code", None)
                         detail = f"HTTP {status_code}" if status_code else "network request failed"
                         model_errors.append(f"{model_config['label']}: {detail}")
-                    except (ValueError, TypeError):
-                        model_errors.append(f"{model_config['label']}: invalid response")
                     except Exception as error:
-                        # SDK exceptions vary by version; only expose a status/type, never request details.
-                        status_code = getattr(getattr(error, "response", None), "status_code", None)
-                        status_code = status_code or getattr(error, "status_code", None)
-                        detail = f"HTTP {status_code}" if status_code else type(error).__name__
-                        model_errors.append(f"{model_config['label']}: {detail}")
+                        # Show actionable response diagnostics but never expose the configured API key.
+                        model_errors.append(
+                            f"{model_config['label']}: {safe_error_summary(error, api_key)}"
+                        )
 
         # Merge duplicate predictions only when their class names and boxes overlap.
         def box_iou(first, second):
@@ -856,11 +856,18 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         st.image(saved_detection["image"], width="stretch")
         st.metric("Components detected", len(saved_detection["records"]))
         if not saved_detection["records"]:
-            st.info(
-                "No components were found above the selected confidence threshold. "
-                "Try a sharper, brighter image with components separated from the background, "
-                "or lower the confidence threshold."
-            )
+            if saved_detection.get("warnings"):
+                st.info(
+                    "No detections were returned because at least one hosted inference request failed. "
+                    "Read the model-specific error above; lowering the confidence threshold will not fix "
+                    "authentication or response-format errors."
+                )
+            else:
+                st.info(
+                    "No components were found above the selected confidence threshold. "
+                    "Try a sharper, brighter image with components separated from the background, "
+                    "or lower the confidence threshold."
+                )
         if saved_detection["records"]:
             visible_records = [
                 {key: value for key, value in row.items() if not key.startswith("_")}
