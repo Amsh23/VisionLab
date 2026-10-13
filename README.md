@@ -27,6 +27,8 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
+The Streamlit runtime uses hosted Roboflow inference by default and keeps local YOLO training dependencies out of the web install to avoid pulling large PyTorch/CUDA packages. For local YOLO checkpoints or training scripts, create a separate environment and install `requirements-training.txt` instead.
+
 ## Electronic Component Analyzer
 
 Open **Electronic Component Analyzer** from the sidebar.
