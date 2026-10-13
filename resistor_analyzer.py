@@ -5,6 +5,8 @@ from collections import Counter
 from io import BytesIO
 from pathlib import Path
 import csv
+import hashlib
+import importlib.util
 
 import cv2
 import numpy as np
@@ -228,16 +230,42 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         "it does not pretend to be a trained object detector."
     )
     st.info(
-        "For the best result, photograph one resistor against a plain background, crop closely around "
-        "its body so all bands are visible, and keep it horizontal. Automatic band detection is experimental; "
-        "manual band selection is available as a reliable fallback."
+        "Use the shared uploader or capture a photo of your workbench with your webcam. "
+        "The full-scene detector can locate electronic components when a model is available; "
+        "the resistor reader estimates ohms from a close crop. A camera capture is a still photo, not a continuous live stream."
     )
 
+    image_source = st.radio(
+        "Image source",
+        ["Use shared image", "Take a webcam photo"],
+        horizontal=True,
+        key="electronics_image_source",
+    )
+    selected_token = source_token
+
+    if image_source == "Take a webcam photo":
+        camera_photo = st.camera_input(
+            "Open your camera, point it at the components on your desk, and take a picture",
+            key="electronics_camera_capture",
+            help="Allow camera access in your browser. On Streamlit Community Cloud, open the app using HTTPS.",
+        )
+        if camera_photo is None:
+            st.info("Take a photo to begin component detection.")
+            return
+        try:
+            camera_bytes = camera_photo.getvalue()
+            with Image.open(BytesIO(camera_bytes)) as captured:
+                image_rgb = np.array(captured.convert("RGB"), dtype=np.uint8, copy=True)
+            selected_token = hashlib.sha256(camera_bytes).hexdigest()[:20]
+        except Exception as error:
+            st.error(f"Could not read the camera image: {error}")
+            return
+
     if image_rgb is None:
-        st.warning("Upload an image using the shared uploader in the VisionLab sidebar first.")
+        st.warning("Upload an image in the sidebar, or select the webcam option and take a photo.")
         return
     if image_rgb.ndim != 3 or image_rgb.shape[2] != 3:
-        st.error("The shared image must decode to a three-channel RGB image.")
+        st.error("The selected image must decode to a three-channel RGB image.")
         return
 
     image_height, image_width = image_rgb.shape[:2]
@@ -245,7 +273,236 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         st.error("The image is too small to crop. Upload an image at least 2 × 2 pixels.")
         return
 
-    st.subheader("1. Select the Resistor Region")
+    # region 04A: Full-Scene Component Detection
+    st.subheader("1. Find Electronic Components on the Desk")
+    st.write(
+        "This detector analyzes the whole selected image and draws a box around each predicted component. "
+        "It does not automatically infer a resistor's ohmic value; use the crop-and-read tool below for that."
+    )
+
+    detector_backend = st.selectbox(
+        "Detection backend",
+        ["Hosted Roboflow model (recommended)", "Local YOLO weights"],
+        key="components_detector_backend",
+    )
+    confidence_threshold = st.slider(
+        "Minimum detection confidence",
+        0.05, 0.95, 0.35, step=0.05,
+        key="components_detector_confidence",
+    )
+
+    if detector_backend == "Hosted Roboflow model (recommended)":
+        model_id = "electronics-components-sveck/7"
+        st.markdown(
+            "Model: [Electronics Components YOLO model](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck/model/7) "
+            "— advertised classes include resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, and potentiometers."
+        )
+        st.caption(
+            "Hosted inference sends the selected photo to Roboflow for processing. "
+            "Check the provider's current terms and quota before using it for anything beyond a class project."
+        )
+        try:
+            configured_api_key = str(st.secrets["ROBOFLOW_API_KEY"]).strip()
+        except Exception:
+            configured_api_key = ""
+
+        if not configured_api_key:
+            st.caption(
+                "For deployment, add ROBOFLOW_API_KEY to the app's Streamlit secrets, or paste your key below for this session."
+            )
+        session_api_key = st.text_input(
+            "Roboflow API key",
+            value="",
+            type="password",
+            key="components_roboflow_key_input",
+            help="Stored only in this Streamlit session when entered here. Never commit API keys to GitHub.",
+        )
+        api_key = configured_api_key or session_api_key.strip()
+        can_run_hosted = bool(api_key) and importlib.util.find_spec("inference_sdk") is not None
+
+        if importlib.util.find_spec("inference_sdk") is None:
+            st.warning("Hosted inference support is not installed. Add inference-sdk from requirements.txt or run: pip install inference-sdk")
+        if not api_key:
+            st.info("Create a Roboflow account and API key at https://app.roboflow.com/settings/api to use the hosted model.")
+        run_detection = st.button(
+            "Detect Components in the Whole Image",
+            type="primary",
+            key="components_run_hosted_detection",
+            disabled=not can_run_hosted,
+            width="stretch",
+        )
+
+        signature = (
+            "hosted", selected_token, model_id, float(confidence_threshold),
+            hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:10],
+        )
+        result_key = "components_full_scene_result"
+
+        if run_detection:
+            try:
+                from inference_sdk import InferenceHTTPClient
+
+                client = InferenceHTTPClient(
+                    api_url="https://serverless.roboflow.com",
+                    api_key=api_key,
+                )
+                with st.spinner("Sending the selected image for component detection..."):
+                    prediction_payload = client.infer(image_rgb, model_id=model_id)
+                predictions = prediction_payload.get("predictions", [])
+                annotated = image_rgb.copy()
+                records = []
+                image_h, image_w = image_rgb.shape[:2]
+
+                for prediction in predictions:
+                    class_name = str(prediction.get("class", prediction.get("class_name", "component")))
+                    confidence = float(prediction.get("confidence", 0.0))
+                    if confidence < float(confidence_threshold):
+                        continue
+
+                    center_x = float(prediction.get("x", 0))
+                    center_y = float(prediction.get("y", 0))
+                    box_width = float(prediction.get("width", 0))
+                    box_height = float(prediction.get("height", 0))
+                    bx1 = max(0, min(image_w - 1, int(round(center_x - box_width / 2))))
+                    by1 = max(0, min(image_h - 1, int(round(center_y - box_height / 2))))
+                    bx2 = max(bx1 + 1, min(image_w, int(round(center_x + box_width / 2))))
+                    by2 = max(by1 + 1, min(image_h, int(round(center_y + box_height / 2))))
+
+                    color = (45, 210, 75)
+                    cv2.rectangle(annotated, (bx1, by1), (bx2, by2), color, 2)
+                    label = f"{class_name} {confidence:.0%}"
+                    label_y = max(20, by1 - 7)
+                    cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.52, (20, 20, 20), 3, cv2.LINE_AA)
+                    cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.52, color, 1, cv2.LINE_AA)
+                    records.append({
+                        "Component": class_name,
+                        "Confidence": round(confidence, 3),
+                        "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
+                    })
+
+                st.session_state[result_key] = {
+                    "signature": repr(signature),
+                    "image": annotated,
+                    "records": records,
+                    "model": model_id,
+                    "error": None,
+                }
+            except Exception as error:
+                st.error(
+                    "Hosted inference could not run. Check your API key, model endpoint, network connection, "
+                    f"and provider quota. Details: {error}"
+                )
+
+    else:
+        model_path_text = st.text_input(
+            "Local YOLO weights path",
+            value="models/components.pt",
+            key="components_local_model_path",
+            help="Point this at a trained component-detection .pt file. The app never downloads weights automatically.",
+        )
+        local_confidence = float(confidence_threshold)
+        model_path = Path(model_path_text).expanduser()
+        if not model_path.is_absolute():
+            model_path = Path(__file__).resolve().parent / model_path
+        if importlib.util.find_spec("ultralytics") is None:
+            st.warning("Local YOLO requires Ultralytics. Install it with: pip install ultralytics")
+        elif not model_path.is_file():
+            st.info(
+                f"No weights file found at {model_path}. Download the dataset and train a model with "
+                "scripts/train_components_yolo.py, or choose the hosted Roboflow backend."
+            )
+        run_detection = st.button(
+            "Detect Components in the Whole Image",
+            type="primary",
+            key="components_run_local_detection",
+            disabled=(importlib.util.find_spec("ultralytics") is None or not model_path.is_file()),
+            width="stretch",
+        )
+        signature = (
+            "local", selected_token, str(model_path), local_confidence,
+        )
+        result_key = "components_full_scene_result"
+
+        if run_detection:
+            try:
+                from ultralytics import YOLO
+
+                with st.spinner("Running local YOLO inference..."):
+                    model = YOLO(str(model_path))
+                    source_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+                    predictions = model.predict(
+                        source=source_bgr,
+                        conf=local_confidence,
+                        verbose=False,
+                    )
+                prediction = predictions[0]
+                annotated = cv2.cvtColor(prediction.plot(), cv2.COLOR_BGR2RGB)
+                records = []
+                boxes = prediction.boxes
+                if boxes is not None:
+                    for box in boxes:
+                        class_id = int(box.cls[0].item())
+                        names = prediction.names
+                        class_name = str(names.get(class_id, class_id) if isinstance(names, dict) else names[class_id])
+                        confidence = float(box.conf[0].item())
+                        coords = box.xyxy[0].cpu().numpy().astype(int).tolist()
+                        records.append({
+                            "Component": class_name,
+                            "Confidence": round(confidence, 3),
+                            "Bounding box (x1, y1, x2, y2)": ", ".join(map(str, coords)),
+                        })
+                st.session_state[result_key] = {
+                    "signature": repr(signature),
+                    "image": annotated,
+                    "records": records,
+                    "model": str(model_path),
+                    "error": None,
+                }
+            except Exception as error:
+                st.error(f"Local YOLO detection failed: {error}")
+
+    saved_detection = st.session_state.get("components_full_scene_result")
+    if saved_detection and saved_detection.get("signature") == repr(signature):
+        st.subheader("Detected Components")
+        st.image(saved_detection["image"], width="stretch")
+        st.metric("Components detected", len(saved_detection["records"]))
+        if saved_detection["records"]:
+            st.dataframe(saved_detection["records"], width="stretch", hide_index=True)
+        else:
+            st.info(
+                "The detector did not return any components above this confidence threshold. "
+                "Try lowering the threshold or taking a clearer photo with the components spread apart."
+            )
+        st.download_button(
+            "Download Component Detection Image",
+            data=png_bytes(saved_detection["image"]),
+            file_name="electronic_components_detected.png",
+            mime="image/png",
+            key="components_detection_download",
+            width="stretch",
+        )
+        st.caption(f"Detector: {saved_detection['model']}. Detections depend on the model's training domain, object size, lighting, and camera angle.")
+
+    with st.expander("Dataset, model limitations, and training"):
+        st.markdown(
+            "- **Recommended public dataset:** [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck), published under CC BY 4.0 on its project page. The current model page lists 10 component categories.\n"
+            "- The full dataset is hosted externally and should not be copied wholesale into this GitHub repository: image datasets are large, and the license requires attribution when redistributing.\n"
+            "- Download/export it through the official provider, then train a small local model with scripts/train_components_yolo.py if you want inference without sending photos to a hosted service.\n"
+            "- A detector identifies object classes only. Reading resistor values still requires a close crop and correct band-color reading below."
+        )
+        st.code(
+            "python -m pip install -r requirements.txt\n"
+            "python scripts/download_component_dataset.py --api-key YOUR_ROBOFLOW_KEY\n"
+            "python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 40\n"
+            "streamlit run app.py",
+            language="bash",
+        )
+    # endregion
+
+    st.divider()
+    st.subheader("2. Select the Resistor Region")
     st.caption("Left and top coordinates are inclusive. Right and bottom coordinates are exclusive.")
     roi_key = str(source_token or "image")
     step_x = max(1, image_width // 100)
@@ -319,7 +576,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     )
 
     signature = (
-        str(source_token), int(x1), int(y1), int(x2), int(y2), transform,
+        str(selected_token), int(x1), int(y1), int(x2), int(y2), transform,
         int(band_count), mode, band_order, tuple(manual_bands),
     )
     signature_text = repr(signature)
