@@ -16,7 +16,7 @@ The rest of VisionLab's OpenCV filters, feature matching, segmentation, video, a
 - **Explain the code:** show each band's digit, multiplier or tolerance, the resistance formula, the expected range, and common uses of the component.
 - **Learn from the output:** inspect the annotated image and download the result.
 
-**Project-specific contribution:** integrating component detection with an interactive resistor-reading workflow and understandable code explanations. The hosted component detector is a third-party Roboflow model; the project does not claim to have trained that hosted model from scratch. Automatic color reading is a classical OpenCV heuristic, so the displayed value is an estimate and should be checked with a multimeter when accuracy matters.
+**Project-specific contribution:** integrating component detection with an interactive resistor-reading workflow and understandable code explanations. The hosted component detector is a third-party Roboflow model; the project does not claim to have trained that hosted model from scratch. The default automatic color reader remains an OpenCV heuristic; an optional local YOLO segmentation model can be trained from resistor-band mask data and selected in the UI. Any decoded value should be checked with a multimeter when accuracy matters.
 
 **Model training:** the repository includes repeatable download/prepare/train scripts for a general electronic-components dataset and a separate IoT development-board dataset. See [DATASETS.md](DATASETS.md). Large raw image archives and trained weights are kept out of ordinary Git history by default.
 
@@ -114,7 +114,7 @@ After training, open **Electronic Component Analyzer → Detection backend → L
 - `DATASETS.md`: public component and IoT-board datasets, licensing notes, and end-to-end training commands.
 - `scripts/download_component_dataset.py`: download the larger general-components dataset from Roboflow.
 - `scripts/download_roboflow_dataset.py`: download the supplied Roboflow IoT or resistor-segmentation datasets.
-- `scripts/prepare_resistor_segmentation_yolo.py`: convert the Roboflow semantic masks to YOLO segmentation polygons.
+- `scripts/prepare_resistor_segmentation_yolo.py`: convert compatible semantic masks into YOLO segmentation polygons.
 - `scripts/download_kaggle_resistor_dataset.py`: download and inventory the Kaggle resistor-segmentation archive.
 - `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
 - `scripts/prepare_iotkits_yolo.py`: convert supported IoTKITs JSON/polygon annotations to YOLO format.
