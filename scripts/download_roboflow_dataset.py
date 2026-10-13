@@ -29,6 +29,15 @@ DATASETS = {
         "task": "semantic segmentation",
         "source": "https://universe.roboflow.com/resistor-color-code/resistor-value-determination",
     },
+    "resistor-color-bands": {
+        "workspace": "resister",
+        "project": "resistor-color-detection",
+        "version": 2,
+        "format": "yolov8",
+        "output": Path("data/resistor_color_bands"),
+        "task": "instance segmentation with band-color classes",
+        "source": "https://universe.roboflow.com/resister/resistor-color-detection",
+    },
 }
 
 
@@ -40,7 +49,7 @@ def main() -> None:
         "--dataset",
         choices=sorted(DATASETS),
         required=True,
-        help="Dataset preset: iot or resistor-segmentation.",
+        help="Dataset preset: iot, resistor-segmentation, or resistor-color-bands.",
     )
     parser.add_argument("--version", type=int, help="Override the dataset version number.")
     parser.add_argument("--format", dest="model_format", help="Override the Roboflow export format.")
@@ -103,10 +112,15 @@ def main() -> None:
         print(f"Class mapping: {classes_csv[0]}")
     if args.dataset == "iot":
         print("Next: train an object detector with scripts/train_components_yolo.py and the exported data.yaml.")
-    else:
+    elif args.dataset == "resistor-segmentation":
         print(
             "This export contains semantic masks, not YOLO bounding-box labels. "
             "Inspect data.yaml, _classes.csv, and paired mask PNGs before training a segmentation model."
+        )
+    else:
+        print(
+            "This export should contain instance-segmentation polygons for individual band colors. "
+            "Inspect a few YOLO label files before training yolo11n-seg.pt."
         )
 
 
