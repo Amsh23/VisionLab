@@ -693,19 +693,26 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         )
         st.caption(f"Detector: {saved_detection['model']}. Detections depend on the model's training domain, object size, lighting, and camera angle.")
 
-    with st.expander("Dataset, model limitations, and training"):
+    with st.expander("Datasets, training, and model limitations"):
         st.markdown(
-            "- **Recommended public dataset:** [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck), published under CC BY 4.0 on its project page. The current model page lists 10 component categories.\n"
-            "- The full dataset is hosted externally and should not be copied wholesale into this GitHub repository: image datasets are large, and the license requires attribution when redistributing.\n"
-            "- Download/export it through the official provider, then train a small local model with scripts/train_components_yolo.py if you want inference without sending photos to a hosted service.\n"
-            "- A detector identifies object classes only. Reading resistor values still requires a close crop and correct band-color reading below."
+            "- **Component detection:** [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck), approximately 8,248 images and 10 classes. The source page lists CC BY 4.0.\n"
+            "- **IoT board recognition:** [IoTKITs on Mendeley Data](https://data.mendeley.com/datasets/x5thzmkxhy/1), 3,200 annotated images across 32 educational kit/board classes, including Arduino, ESP32, and Raspberry Pi. The source page lists CC BY 4.0.\n"
+            "- Full datasets are downloaded locally and are intentionally not committed to this repository. See the English [DATASETS.md training guide](https://github.com/Amsh23/VisionLab/blob/main/DATASETS.md) for source attribution, installation, download, conversion, and training steps.\n"
+            "- Use separate models for loose electronic components and development boards. A generic object detector finds objects; it does not decode resistor bands or calculate resistance by itself.\n"
+            "- The hosted Roboflow detector is a third-party model. Local YOLO mode requires your own compatible weights file and the optional training dependencies."
         )
         st.code(
-            "python -m pip install -r requirements.txt\n"
-            "python scripts/download_component_dataset.py --api-key YOUR_ROBOFLOW_KEY\n"
-            "python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 40\n"
-            "streamlit run app.py",
+            "python -m pip install -r requirements-training.txt\n"
+            "python scripts/download_component_dataset.py\n"
+            "python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 60 --weights-out models/components.pt\n"
+            "python scripts/download_iotkits_dataset.py\n"
+            "python scripts/prepare_iotkits_yolo.py\n"
+            "python scripts/train_components_yolo.py --data data/iotkits_yolo/data.yaml --name iot_boards --weights-out models/iot_boards.pt",
             language="bash",
+        )
+        st.caption(
+            "Run training in a dedicated local environment, not in the Streamlit Cloud app environment. "
+            "Keep raw datasets and large model weights out of normal Git history; preserve the source license and citation."
         )
     # endregion
 
