@@ -6,6 +6,7 @@ This folder contains a small, standards-based resistor color-code reference tabl
 
 - `resistor_color_reference.csv` lists the ten digit colors, their multipliers, common tolerance values, and reference color swatches.
 - These are reference values, not photographs and not a trained machine-learning model.
+- `synthetic_resistors/images/` contains 12 small synthetic PNG samples. Their labels and expected resistor values are in `synthetic_resistors/labels.csv`. These are illustrative generated images, not photographs of physical resistors.
 
 ## Generate an image dataset
 
