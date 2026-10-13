@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: visionlab-model-training
+  group: visionlab-model-training-v2
   cancel-in-progress: true
 
 jobs:
