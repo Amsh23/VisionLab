@@ -26,7 +26,6 @@ jobs:
     timeout-minutes: 180
     env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
-      YOLO_CONFIG_DIR: ${{ runner.temp }}/ultralytics
     steps:
       - uses: actions/checkout@v4
         with:
