@@ -56,7 +56,7 @@ There is no API-key input in the user interface. The selected image is sent to b
 
 ### Automatic model training
 
-The repository includes a GitHub Actions workflow that downloads public datasets, trains small local checkpoints, and publishes available model files to `models/` on the default branch. Training uses CPU runners and compact YOLO models/short runs as an initial baseline; it is not a substitute for full training and real-world validation.
+The repository includes a **manual** GitHub Actions workflow that downloads public datasets, trains local checkpoints, and publishes available model files to `models/` on the default branch. Ordinary source-code pushes only run lightweight CI; training does not restart on every edit. The workflow caches downloaded datasets and lets you select `electronics`, `iot`, `resistor-colors`, or `all`. Training uses CPU runners and must still be evaluated on independent real photos.
 
 - The electronics detector uses the public Circuit Elements YOLO dataset as a no-key fallback; if a GitHub Actions repository secret named `ROBOFLOW_API_KEY` is configured, the workflow tries the larger Roboflow Electronics Components dataset first.
 - The supplied Roboflow `iot_dataset` is a dataset-only project (Roboflow currently shows 0 trained models), so it cannot be called as a hosted inference endpoint. A separate existing public model, `iot-components-learning-ogliq/1`, is used for hosted IoT predictions. Local IoT training from your supplied dataset requires the `ROBOFLOW_API_KEY` GitHub Actions secret; without it, the workflow records that local IoT training was skipped rather than treating a failed download as success.

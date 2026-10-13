@@ -1,22 +1,26 @@
 name: Train VisionLab Models
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/train-electronics-models.yml"
-      - "requirements.txt"
-      - "requirements-training.txt"
-      - "resistor_analyzer.py"
-      - "resistor_band_classifier.py"
-      - "scripts/**"
+  # Model training is manual because it is CPU-intensive. Ordinary code pushes
+  # run the lightweight CI workflow, not a full dataset download and retrain.
   workflow_dispatch:
+    inputs:
+      task:
+        description: "Which model should be trained?"
+        required: true
+        type: choice
+        default: electronics
+        options:
+          - electronics
+          - iot
+          - resistor-colors
+          - all
 
 permissions:
   contents: write
 
 concurrency:
-  group: visionlab-model-training-v2
+  group: visionlab-model-training-v3
   cancel-in-progress: true
 
 jobs:
@@ -37,14 +41,29 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-training.txt
 
+      - name: Restore downloaded datasets cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            data/circuit-elements
+            data/circuit-elements-normalized
+            data/component_dataset
+            data/iot_roboflow
+            data/iotkits_raw
+            data/iotkits_yolo
+            data/resistor_color_bands
+          key: visionlab-datasets-${{ runner.os }}-${{ hashFiles('scripts/download*.py', 'scripts/prepare*.py') }}
+          restore-keys: |
+            visionlab-datasets-${{ runner.os }}-
+
       - name: Install CPU training dependencies
         run: |
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-training.txt huggingface_hub pyyaml
 
-      - name: Download datasets and train models
-        run: python scripts/train_models_ci.py all
+      - name: Download datasets and train selected model
+        run: python scripts/train_models_ci.py "${{ inputs.task }}"
 
       - name: Commit trained model checkpoints
         run: |
