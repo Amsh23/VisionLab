@@ -173,25 +173,18 @@ def classify_hsv_color(hsv_values: np.ndarray, baseline_value: float = 0.0) -> s
 
 
 def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dict], list[dict]]:
-    """Detect resistor bands from a body-only, color-contrast profile.
+    """Detect color bands from a resistor-body profile, not from band edges.
 
-    The previous edge-focused profile tended to find the two edges of a band
-    separately and could mistake the rounded resistor body for a color band.
-    This version first estimates the horizontal body span by checking how much
-    of each vertical image column differs from the background. It then compares
-    each column's Lab color with a wide local median-like baseline. The wider
-    baseline is important: a baseline window narrower than a band absorbs the
-    band's color and leaves only its edges.
-
-    This remains classical computer vision, not a guarantee of exact color
-    recognition under arbitrary lighting. The UI permits manual correction.
+    A narrow-band edge detector can mistake the two edges of one stripe for
+    two separate bands and often misses gold/silver bands when their colors are
+    close to the resistor body. This method estimates the body span, classifies
+    each column from its median HSV color with respect to local body brightness,
+    smooths single-column noise, and groups consecutive color labels into bands.
     """
     height, width = roi_rgb.shape[:2]
     if width < 25 or height < 8 or expected_count not in (4, 5):
         return [], []
 
-    # Sample the middle of the component so pins, the background, and the top
-    # body highlight have less influence on each band's measured color.
     scan_top = max(0, int(round(height * 0.36)))
     scan_bottom = min(height, max(scan_top + 1, int(round(height * 0.64))))
     if scan_bottom - scan_top < 5:
@@ -202,24 +195,24 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
     profile_lab = cv2.cvtColor(profile_rgb.reshape(1, width, 3), cv2.COLOR_RGB2LAB)[0].astype(np.float32)
     profile_hsv = cv2.cvtColor(profile_rgb.reshape(1, width, 3), cv2.COLOR_RGB2HSV)[0].astype(np.float32)
 
-    # Pixels inside the component occupy much more vertical space than thin
-    # metal leads, background texture, or the occasional drawn annotation line.
+    # Detect the vertical resistor body while excluding thin metal leads. When
+    # the crop already fills the frame with the body, fall back to the full crop.
+    scan_lab = cv2.cvtColor(scan_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
     edge_width = max(3, int(round(width * 0.035)))
     edge_pixels = np.concatenate(
-        [scan_rgb[:, :edge_width, :].reshape(-1, 3),
-         scan_rgb[:, -edge_width:, :].reshape(-1, 3)],
+        [
+            scan_rgb[:, :edge_width, :].reshape(-1, 3),
+            scan_rgb[:, -edge_width:, :].reshape(-1, 3),
+        ],
         axis=0,
     )
     background_rgb = np.median(edge_pixels, axis=0).astype(np.uint8)
     background_lab = cv2.cvtColor(background_rgb.reshape(1, 1, 3), cv2.COLOR_RGB2LAB)[0, 0].astype(np.float32)
-    scan_lab = cv2.cvtColor(scan_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
     foreground_ratio = (
         np.linalg.norm(scan_lab - background_lab.reshape(1, 1, 3), axis=2) > 16.0
     ).mean(axis=0)
     body_mask = foreground_ratio >= 0.52
 
-    # Close very short gaps caused by glare or antialiasing before finding the
-    # longest body-like span. Thin leads usually fail the vertical occupancy test.
     body_gap = max(2, int(round(width * 0.02)))
     index = 0
     while index < width:
@@ -244,107 +237,85 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
         body_segments.append((body_start, index))
 
     if body_segments:
-        candidate_body = max(body_segments, key=lambda item: item[1] - item[0])
+        body_start, body_end = max(body_segments, key=lambda item: item[1] - item[0])
     else:
-        candidate_body = (int(width * 0.025), int(width * 0.975))
-
-    body_start, body_end = candidate_body
+        body_start, body_end = int(width * 0.03), int(width * 0.97)
     body_width = body_end - body_start
 
-    # A very tight crop may contain the body all the way to its left/right
-    # edges, making background segmentation impossible; in that case scan most
-    # of the crop. Reject short foreground spans that are likely to be a lead.
     if body_width < max(20, int(width * 0.30)):
-        body_start, body_end = int(width * 0.025), int(width * 0.975)
+        body_start, body_end = int(width * 0.03), int(width * 0.97)
         body_width = body_end - body_start
 
-    # Ignore the rounded ends of the body: they have large color gradients that
-    # are not printed bands. Real resistor bands usually sit inward from them.
-    end_margin = max(2, int(round(body_width * 0.055)))
-    allowed_left = min(body_end - 1, body_start + end_margin)
-    allowed_right = max(allowed_left + 1, body_end - end_margin)
+    # Exclude rounded body ends, where changing geometry/lighting may resemble a
+    # color band. The margin is small enough to preserve the outer tolerance band.
+    end_margin = max(3, int(round(body_width * 0.05)))
+    left = min(body_end - 1, body_start + end_margin)
+    right = max(left + 1, body_end - end_margin)
+    if right - left < max(20, int(width * 0.25)):
+        left, right = int(width * 0.03), int(width * 0.97)
+        body_width = right - left
 
-    # Use a baseline wider than the expected band width. A small baseline finds
-    # only the band edges; this baseline responds to local lighting without
-    # treating a flat color band as its own background.
-    kernel_width = max(9, min(101, int(round(body_width * 0.14)) | 1))
-    smoothed_lab = cv2.GaussianBlur(
-        profile_lab.reshape(1, width, 3), (kernel_width, 1), 0
-    ).reshape(width, 3)
-    contrast = np.linalg.norm(profile_lab - smoothed_lab, axis=1)
+    body_lab = np.median(profile_lab[left:right], axis=0)
+    body_value = float(np.median(profile_hsv[left:right, 2]))
 
-    body_contrast = contrast[allowed_left:allowed_right]
-    if len(body_contrast) == 0:
-        return [], []
-    median_contrast = float(np.median(body_contrast))
-    contrast_threshold = max(7.5, min(14.0, median_contrast * 2.6 + 1.5))
-    band_mask = (contrast >= contrast_threshold)
-    band_mask[:allowed_left] = False
-    band_mask[allowed_right:] = False
+    # Classify the full width profile first, then group contiguous labels. This
+    # detects complete band interiors and avoids counting both band edges.
+    column_labels = [
+        classify_hsv_color(profile_hsv[x], baseline_value=body_value)
+        for x in range(width)
+    ]
+    smoothed_labels = column_labels.copy()
+    for index in range(1, width - 1):
+        if (
+            column_labels[index - 1] == column_labels[index + 1]
+            and column_labels[index] != column_labels[index - 1]
+        ):
+            smoothed_labels[index] = column_labels[index - 1]
 
-    # Merge only tiny within-band breaks; adjacent bands are much farther apart.
-    band_gap = max(1, int(round(body_width * 0.012)))
-    index = allowed_left
-    while index < allowed_right:
-        if band_mask[index]:
-            index += 1
-            continue
-        gap_start = index
-        while index < allowed_right and not band_mask[index]:
-            index += 1
-        if gap_start > allowed_left and index < allowed_right and index - gap_start <= band_gap:
-            band_mask[gap_start:index] = True
-
-    min_band_width = max(3, int(round(body_width * 0.027)))
-    max_band_width = max(min_band_width + 1, int(round(body_width * 0.12)))
+    minimum_width = max(3, int(round(body_width * 0.018)))
+    maximum_width = max(minimum_width + 1, int(round(body_width * 0.13)))
     raw_runs: list[dict] = []
-    index = allowed_left
+    index = left
 
-    while index < allowed_right:
-        if not band_mask[index]:
-            index += 1
-            continue
+    while index < right:
+        color = smoothed_labels[index]
         run_start = index
-        while index < allowed_right and band_mask[index]:
+        index += 1
+        while index < right and smoothed_labels[index] == color:
             index += 1
         run_end = index
         run_width = run_end - run_start
-        if not (min_band_width <= run_width <= max_band_width):
+        if not (minimum_width <= run_width <= maximum_width):
             continue
 
-        # Avoid edge pixels by measuring the central portion of the candidate.
-        trim = int(round(run_width * 0.15))
+        # Re-evaluate a band from its central color sample to reduce sensitivity
+        # to antialiased boundary pixels and dark outline strokes.
+        trim = int(round(run_width * 0.12))
         core_start = min(run_end - 1, run_start + trim)
         core_end = max(core_start + 1, run_end - trim)
-        core_rgb = scan_rgb[:, core_start:core_end, :].reshape(-1, 3)
-        median_rgb = np.median(core_rgb, axis=0).astype(np.uint8)
-        median_hsv = cv2.cvtColor(median_rgb.reshape(1, 1, 3), cv2.COLOR_RGB2HSV)[0, 0]
+        band_hsv = np.median(profile_hsv[core_start:core_end], axis=0)
+        band_lab = np.median(profile_lab[core_start:core_end], axis=0)
+        band_color = classify_hsv_color(band_hsv, baseline_value=body_value)
+        distance = float(np.linalg.norm(band_lab - body_lab))
+        if distance < 9.0:
+            continue
 
-        # Use nearby body pixels for relative brightness so brown/orange and
-        # yellow/gold can be separated more reliably than with hue alone.
-        neighbor_margin = max(2, int(round(body_width * 0.025)))
-        left_start = max(allowed_left, run_start - neighbor_margin - kernel_width // 2)
-        right_end = min(allowed_right, run_end + neighbor_margin + kernel_width // 2)
-        neighbors = np.concatenate([
-            profile_hsv[left_start:max(left_start, run_start - neighbor_margin), 2],
-            profile_hsv[min(right_end, run_end + neighbor_margin):right_end, 2],
-        ])
-        baseline_value = float(np.median(neighbors)) if len(neighbors) else float(np.median(profile_hsv[allowed_left:allowed_right, 2]))
-        color = classify_hsv_color(median_hsv, baseline_value=baseline_value)
+        score = distance * np.sqrt(run_width)
+        raw_runs.append(
+            {
+                "color": band_color,
+                "start": run_start,
+                "end": run_end,
+                "center": (run_start + run_end) // 2,
+                "width": run_width,
+                "contrast": distance,
+                "score": score,
+            }
+        )
 
-        strength = float(np.mean(contrast[run_start:run_end]))
-        raw_runs.append({
-            "color": color,
-            "start": run_start,
-            "end": run_end,
-            "center": (run_start + run_end) // 2,
-            "width": run_width,
-            "contrast": strength,
-            "score": strength * np.sqrt(run_width),
-            "body_top": int(round(height * 0.18)),
-            "body_bottom": int(round(height * 0.78)),
-        })
-
+    # Keep the strongest candidates, then return them in physical left-to-right
+    # order. If a band is not visible enough, the UI asks for manual correction
+    # instead of fabricating a complete resistor code.
     selected = sorted(raw_runs, key=lambda run: run["score"], reverse=True)[:expected_count]
     selected.sort(key=lambda run: run["center"])
     return selected, raw_runs
