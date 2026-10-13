@@ -54,9 +54,21 @@ ROBOFLOW_API_KEY = "your_roboflow_api_key"
 
 There is no API-key input in the user interface. The selected image is sent to both hosted inference endpoints. Do not upload confidential images, and check Roboflow's current terms and quota. The key is never stored in this repository or printed into inference errors.
 
-### Local detector and custom training
+### Automatic model training
 
-Training is optional and should be done on a PC, not in the Streamlit Cloud app environment. Use the dedicated local environment from `requirements-training.txt`; it includes Streamlit, Ultralytics, Roboflow, and the non-headless OpenCV package so the same environment can train and run local YOLO weights.
+The repository includes a GitHub Actions workflow that downloads public datasets, trains small local checkpoints, and publishes available model files to `models/` on the default branch. Training uses CPU runners and compact YOLO models/short runs as an initial baseline; it is not a substitute for full training and real-world validation.
+
+- The electronics detector uses the public Circuit Elements YOLO dataset as a no-key fallback; if a GitHub Actions repository secret named `ROBOFLOW_API_KEY` is configured, the workflow tries the larger Roboflow Electronics Components dataset first.
+- The IoT detector uses the Roboflow `iot_dataset` when the Actions secret is available; otherwise it downloads IoTKITs and converts supported annotations.
+- The resistor task trains a separate 12-color patch classifier. Without the Actions secret, its initial training examples are synthetic, so its synthetic test score must not be presented as real-photo accuracy. If the secret is available, the workflow also tries the public Roboflow resistor-band segmentation dataset and trains `models/resistor_seg.pt`.
+
+**Important:** Streamlit Community Cloud secrets and GitHub Actions secrets are separate. Your existing `ROBOFLOW_API_KEY` inside Streamlit is not automatically exposed to GitHub Actions. To enable the real Roboflow training datasets, add the same key under **GitHub → Settings → Secrets and variables → Actions** as `ROBOFLOW_API_KEY`. Never commit the key in a file.
+
+Raw datasets remain excluded from Git. The workflow publishes compact trained checkpoints only, so Streamlit can load them after its next deployment/restart. Training is not complete until the GitHub Actions run is green and the resulting model files appear in `models/`.
+
+### Run training locally
+
+Use this only when you want to train outside GitHub Actions. Use the dedicated local environment from `requirements-training.txt`.
 
 **Windows PowerShell**
 ```powershell
@@ -80,13 +92,29 @@ python scripts/download_roboflow_dataset.py --dataset iot
 python scripts/train_components_yolo.py --data data/iot_roboflow/data.yaml --model yolo11n.pt --epochs 100 --imgsz 640 --batch 8 --name iot_parts --weights-out models/iot_components.pt
 ```
 
-**Download the resistor semantic-segmentation dataset**
+**Train the resistor band-color model**
+```powershell
+python scripts/train_resistor_band_classifier.py --samples-per-class 1400 --output models/resistor_band_classifier.joblib
+```
+
+This produces an augmented 12-color patch classifier for initialization. Its held-out synthetic accuracy is not real-camera accuracy.
+
+For a real annotated segmentation model, configure `ROBOFLOW_API_KEY` and download the public band-color dataset:
+```powershell
+$env:ROBOFLOW_API_KEY="your_roboflow_api_key"
+python scripts/download_roboflow_dataset.py --dataset resistor-color-bands
+python scripts/train_components_yolo.py --data data/resistor_color_bands/data.yaml --model yolo11n-seg.pt --epochs 60 --imgsz 640 --batch 4 --name resistor_color_bands --weights-out models/resistor_seg.pt
+```
+
+The dataset is published as an instance-segmentation task with nine color classes including gold and silver side bands. Review sample labels before training; class names and polygon labels must match the selected checkpoint.
+
+**Optional resistor-value semantic masks**
 ```powershell
 $env:ROBOFLOW_API_KEY="your_roboflow_api_key"
 python scripts/download_roboflow_dataset.py --dataset resistor-segmentation
 ```
 
-That export contains semantic masks, not ordinary bounding boxes. Convert the masks to YOLO segmentation polygons and train a segmentation checkpoint (not the default detection checkpoint):
+That second export contains semantic masks, not ordinary bounding boxes. Convert the masks to YOLO segmentation polygons and train a separate segmentation checkpoint:
 
 ```powershell
 python scripts/prepare_resistor_segmentation_yolo.py --input data/resistor_value_segmentation --output data/resistor_seg_yolo --background-value 0
@@ -113,7 +141,10 @@ The main Electronic Component Analyzer uses the two hosted Roboflow models by de
 - `scripts/generate_resistor_dataset.py`: generate more synthetic resistor images for pipeline demonstrations.
 - `DATASETS.md`: public component and IoT-board datasets, licensing notes, and end-to-end training commands.
 - `scripts/download_component_dataset.py`: download the larger general-components dataset from Roboflow.
-- `scripts/download_roboflow_dataset.py`: download the supplied Roboflow IoT or resistor-segmentation datasets.
+- `scripts/download_roboflow_dataset.py`: download the supplied Roboflow IoT, resistor-band-color, or resistor-segmentation datasets.
+- `scripts/train_resistor_band_classifier.py` and `resistor_band_classifier.py`: train and load the separate 12-color resistor-band patch classifier.
+- `scripts/prepare_circuit_elements_yolo.py`: normalize the public Circuit Elements electronics dataset for YOLO training.
+- `.github/workflows/train-electronics-models.yml`: download datasets, train available component/color checkpoints, and publish resulting weights.
 - `scripts/prepare_resistor_segmentation_yolo.py`: convert compatible semantic masks into YOLO segmentation polygons.
 - `scripts/download_kaggle_resistor_dataset.py`: download and inventory the Kaggle resistor-segmentation archive.
 - `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
@@ -133,7 +164,7 @@ A detector finding a resistor does **not** automatically measure its resistance.
 
 If the app already exists and it was deployed with Python 3.14, Community Cloud requires deleting and redeploying the app to change its Python version. Save its URL/subdomain and secrets first, then select Python 3.12 in Advanced settings during redeployment. See [Streamlit's Python-version instructions](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/upgrade-python).
 
-The image-processing modules and manual resistor decoder work without the Roboflow key. Hosted object detection needs the key and network access; local YOLO mode needs Ultralytics and a compatible local .pt weights file.
+The image-processing modules work without the Roboflow key. Hosted inference needs the Streamlit secret and network access. Local electronics/IoT detection loads any trained checkpoints in `models/`; resistor band recognition uses the trained patch classifier when available or the dedicated segmentation checkpoint when one has been trained. A synthetic-only color classifier is a baseline, not a validated real-photo model.
 
 ## Public dataset and license
 
