@@ -87,9 +87,36 @@ Download with `scripts/download_iotkits_dataset.py`. Then convert supported per-
 
 This dataset focuses on populated PCBs, so it may not generalize to loose components on a desk or to development boards. Evaluate each task on separate real photos.
 
+### 7. Resistor Color Band Segmentation
+
+- **Source:** [Roboflow Universe — Resistor Color Detection](https://universe.roboflow.com/resister/resistor-color-detection)
+- **Task:** instance segmentation of individual bands and edge color regions.
+- **Reported classes:** Orange, Red, Green, Yellow, Blue, Black, Brown, Side-Gold, and Side-Silver.
+- **License shown on the source page:** CC BY 4.0.
+- **Reported version:** `resistor-color-detection/2` (the page lists 1,168 images for this export).
+- **Download:** `scripts/download_roboflow_dataset.py --dataset resistor-color-bands`.
+
+This is the real-photo dataset intended for a separate `yolo11n-seg.pt` band-color model. The class names for `Side-Gold` and `Side-Silver` are normalized in the app to Gold and Silver. Check the exported labels before training, especially whether the Roboflow export contains segmentation polygons.
+
+### 8. Public Circuit Elements (no Roboflow key required)
+
+- **Source:** [Hugging Face — LibreYOLO/Circuit Elements](https://huggingface.co/datasets/LibreYOLO/circuit-elements)
+- **Reported size:** 772 annotated images (672 train, 64 validation, 36 test) across 45 source classes.
+- **Format:** YOLO object-detection labels.
+- **License shown on the dataset card:** CC BY 4.0.
+- **Usage:** `.github/workflows/train-electronics-models.yml` downloads this dataset as a fallback when the Actions Roboflow secret is unavailable. `scripts/prepare_circuit_elements_yolo.py` merges spelling variants and emits a normalized YOLO dataset.
+
+This dataset mostly shows discrete circuit parts; it is not a comprehensive IoT board dataset. Keep a separate board model when board/module recognition is the goal.
+
+### Automated training and secret scopes
+
+The GitHub Actions workflow can train models from publicly downloadable sources. The `ROBOFLOW_API_KEY` currently stored in Streamlit Community Cloud is **not automatically available** to GitHub Actions. To enable its Roboflow dataset downloads, add the key as a repository Actions secret named `ROBOFLOW_API_KEY` under **Settings → Secrets and variables → Actions**. Never add the actual value to Git.
+
+The resistor-band patch classifier can be trained on synthetic augmented color patches as an offline baseline. Synthetic-only metrics are not evidence of real-camera accuracy. The Roboflow resistor band segmentation checkpoint is preferred when real annotations can be downloaded and verified.
+
 ### Dataset policy
 
-The full raw datasets are intentionally not tracked by this repository by default. They contain thousands of images, can make Git history very large, and need their source attribution kept with them. Downloaded assets are ignored by .gitignore; DATASETS.md, download/prepare scripts, and training instructions are tracked in GitHub instead.
+The full raw datasets are intentionally not tracked by this repository. They can make Git history very large and require their source attribution to be retained. Downloaded assets are ignored by .gitignore; dataset metadata, training scripts, and instructions are tracked. The automated workflow publishes only the trained model checkpoints required by the app, after a training run successfully produces them.
 
 The existing synthetic resistor pictures are for code/tests only. They are not a substitute for real resistor photographs. Collect and label real close-up images under varied light, angles, resistor body colors, and camera white balance before making accuracy claims.
 
@@ -108,7 +135,7 @@ python -m pip install -r requirements-training.txt
 
 ### Train a component detector
 
-1. Create a free Roboflow API key at https://app.roboflow.com/settings/api.
+1. Create a Roboflow API key at https://app.roboflow.com/settings/api. For local training, put it in the `ROBOFLOW_API_KEY` environment variable. For GitHub Actions, separately add it as an Actions repository secret.
 2. Download the component dataset and train:
 
 ~~~powershell
