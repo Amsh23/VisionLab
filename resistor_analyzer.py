@@ -988,7 +988,9 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     )
                 else:
                     result["decoded"] = decode_band_sequence(result["bands"], int(band_count))
-        except (ValueError, cv2.error, IndexError, TypeError, RuntimeError, OSError, ImportError) as error:
+        except Exception as error:
+            # Model loading can raise dependency- or checkpoint-specific exceptions.
+            # Surface these in the Streamlit page instead of crashing the whole app.
             result["error"] = str(error)
             result.setdefault("annotated", roi.copy())
 
