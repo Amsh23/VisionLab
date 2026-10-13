@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 
 import cv2
+import requests
 import numpy as np
 import streamlit as st
 from PIL import Image
@@ -318,10 +319,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             help="Stored only in this Streamlit session when entered here. Never commit API keys to GitHub.",
         )
         api_key = configured_api_key or session_api_key.strip()
-        can_run_hosted = bool(api_key) and importlib.util.find_spec("inference_sdk") is not None
-
-        if importlib.util.find_spec("inference_sdk") is None:
-            st.warning("Hosted inference support is not installed. Add inference-sdk from requirements.txt or run: pip install inference-sdk")
+        can_run_hosted = bool(api_key)
         if not api_key:
             st.info("Create a Roboflow account and API key at https://app.roboflow.com/settings/api to use the hosted model.")
         run_detection = st.button(
@@ -340,16 +338,23 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
         if run_detection:
             try:
-                from inference_sdk import InferenceHTTPClient
-
-                client = InferenceHTTPClient(
-                    api_url="https://serverless.roboflow.com",
-                    api_key=api_key,
-                )
                 with st.spinner("Sending the selected image for component detection..."):
-                    # Use OpenCV-style BGR input for NumPy image data.
-                    source_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
-                    prediction_payload = client.infer(source_bgr, model_id=model_id)
+                    # Use Roboflow's hosted REST endpoint directly. This avoids installing
+                    # inference-sdk, which pulls opencv-python alongside opencv-python-headless.
+                    image_buffer = BytesIO()
+                    Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
+                    response = requests.post(
+                        f"https://detect.roboflow.com/{model_id}",
+                        params={
+                            "api_key": api_key,
+                            "confidence": int(round(float(confidence_threshold) * 100)),
+                            "overlap": 30,
+                        },
+                        files={"file": ("image.jpg", image_buffer.getvalue(), "image/jpeg")},
+                        timeout=60,
+                    )
+                    response.raise_for_status()
+                    prediction_payload = response.json()
                 predictions = prediction_payload.get("predictions", [])
                 annotated = image_rgb.copy()
                 records = []
