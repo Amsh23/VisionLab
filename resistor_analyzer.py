@@ -500,206 +500,198 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         "It does not automatically infer a resistor's ohmic value; use the crop-and-read tool below for that."
     )
 
-    detector_backend = st.selectbox(
-        "Detection backend",
-        ["Hosted Roboflow model (recommended)", "Local YOLO weights"],
-        key="components_detector_backend",
-    )
     confidence_threshold = st.slider(
         "Minimum detection confidence",
-        0.05, 0.95, 0.35, step=0.05,
+        0.10, 0.90, 0.25, step=0.05,
         key="components_detector_confidence",
     )
 
-    if detector_backend == "Hosted Roboflow model (recommended)":
-        model_id = "electronics-components-sveck/7"
-        st.markdown(
-            "Model: [Electronics Components YOLO model](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck/model/7) "
-            "— advertised classes include resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, and potentiometers."
-        )
-        st.caption(
-            "Hosted inference sends the selected photo to Roboflow for processing. "
-            "Check the provider's current terms and quota before using it for anything beyond a class project."
-        )
-        try:
-            configured_api_key = str(st.secrets["ROBOFLOW_API_KEY"]).strip()
-        except Exception:
-            configured_api_key = ""
+    # Hosted inference uses the key already configured in Streamlit Community Cloud.
+    # Never ask users to paste secrets into the app UI or print the key in error messages.
+    try:
+        api_key = str(st.secrets["ROBOFLOW_API_KEY"]).strip()
+    except Exception:
+        api_key = ""
 
-        if not configured_api_key:
-            st.caption(
-                "For deployment, add ROBOFLOW_API_KEY to the app's Streamlit secrets, or paste your key below for this session."
-            )
-        session_api_key = st.text_input(
-            "Roboflow API key",
-            value="",
-            type="password",
-            key="components_roboflow_key_input",
-            help="Stored only in this Streamlit session when entered here. Never commit API keys to GitHub.",
-        )
-        api_key = configured_api_key or session_api_key.strip()
-        can_run_hosted = bool(api_key)
-        if not api_key:
-            st.info("Create a Roboflow account and API key at https://app.roboflow.com/settings/api to use the hosted model.")
-        run_detection = st.button(
-            "Detect Components in the Whole Image",
-            type="primary",
-            key="components_run_hosted_detection",
-            disabled=not can_run_hosted,
-            width="stretch",
+    hosted_models = [
+        {
+            "id": "electronics-components-sveck/7",
+            "label": "Electronics Components",
+            "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
+        },
+        {
+            "id": "iot_dataset/2",
+            "label": "IoT Components and Modules",
+            "source": "https://universe.roboflow.com/design-project-zeico/iot_dataset",
+        },
+    ]
+
+    st.markdown(
+        "The analyzer checks both a general electronics model and an IoT-focused model. "
+        "Their predictions are combined into one annotated result."
+    )
+    st.caption(
+        "The selected image is sent to Roboflow hosted inference. Avoid uploading private or sensitive images."
+    )
+    st.markdown(
+        "Models: [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck/model/7) "
+        " · [IoT Dataset](https://universe.roboflow.com/design-project-zeico/iot_dataset)"
+    )
+
+    api_key_fingerprint = (
+        hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:10] if api_key else "missing"
+    )
+    model_ids = tuple(model["id"] for model in hosted_models)
+    signature = (
+        "hosted_ensemble",
+        selected_token,
+        model_ids,
+        float(confidence_threshold),
+        api_key_fingerprint,
+    )
+    result_key = "components_full_scene_result"
+
+    if not api_key:
+        st.error(
+            "ROBOFLOW_API_KEY is not configured in Streamlit secrets. "
+            "Add it under App settings → Secrets, then restart or rerun the app."
         )
 
-        signature = (
-            "hosted", selected_token, model_id, float(confidence_threshold),
-            hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:10],
-        )
-        result_key = "components_full_scene_result"
+    run_detection = st.button(
+        "Detect Electronic and IoT Components",
+        type="primary",
+        key="components_run_hosted_detection",
+        disabled=not bool(api_key),
+        width="stretch",
+    )
 
-        if run_detection:
-            try:
-                with st.spinner("Sending the selected image for component detection..."):
-                    # Use Roboflow's hosted REST endpoint directly. This avoids installing
-                    # inference-sdk, which pulls opencv-python alongside opencv-python-headless.
-                    image_buffer = BytesIO()
-                    Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
+    if run_detection:
+        image_buffer = BytesIO()
+        Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
+        jpeg_bytes = image_buffer.getvalue()
+        image_h, image_w = image_rgb.shape[:2]
+        candidates = []
+        model_errors = []
+
+        with st.spinner("Checking the image with the electronics and IoT models..."):
+            for model_config in hosted_models:
+                model_id = model_config["id"]
+                try:
                     response = requests.post(
                         f"https://detect.roboflow.com/{model_id}",
                         params={
                             "api_key": api_key,
-                            "confidence": int(round(float(confidence_threshold) * 100)),
-                            "overlap": 30,
+                            "confidence": max(10, int(round(float(confidence_threshold) * 100))),
+                            "overlap": 35,
                         },
-                        files={"file": ("image.jpg", image_buffer.getvalue(), "image/jpeg")},
+                        files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
                         timeout=60,
                     )
                     response.raise_for_status()
                     prediction_payload = response.json()
-                predictions = prediction_payload.get("predictions", [])
-                annotated = image_rgb.copy()
-                records = []
-                image_h, image_w = image_rgb.shape[:2]
+                    predictions = prediction_payload.get("predictions", [])
+                    if not isinstance(predictions, list):
+                        raise ValueError("The inference response did not contain a predictions list.")
 
-                for prediction in predictions:
-                    class_name = str(prediction.get("class", prediction.get("class_name", "component")))
-                    confidence = float(prediction.get("confidence", 0.0))
-                    if confidence < float(confidence_threshold):
-                        continue
+                    for prediction in predictions:
+                        try:
+                            class_name = str(
+                                prediction.get("class", prediction.get("class_name", "component"))
+                            ).strip() or "component"
+                            confidence = float(prediction.get("confidence", 0.0))
+                            if confidence < float(confidence_threshold):
+                                continue
 
-                    center_x = float(prediction.get("x", 0))
-                    center_y = float(prediction.get("y", 0))
-                    box_width = float(prediction.get("width", 0))
-                    box_height = float(prediction.get("height", 0))
-                    bx1 = max(0, min(image_w - 1, int(round(center_x - box_width / 2))))
-                    by1 = max(0, min(image_h - 1, int(round(center_y - box_height / 2))))
-                    bx2 = max(bx1 + 1, min(image_w, int(round(center_x + box_width / 2))))
-                    by2 = max(by1 + 1, min(image_h, int(round(center_y + box_height / 2))))
+                            center_x = float(prediction.get("x", 0))
+                            center_y = float(prediction.get("y", 0))
+                            box_width = float(prediction.get("width", 0))
+                            box_height = float(prediction.get("height", 0))
+                            bx1 = max(0, min(image_w - 1, int(round(center_x - box_width / 2))))
+                            by1 = max(0, min(image_h - 1, int(round(center_y - box_height / 2))))
+                            bx2 = max(bx1 + 1, min(image_w, int(round(center_x + box_width / 2))))
+                            by2 = max(by1 + 1, min(image_h, int(round(center_y + box_height / 2))))
+                            if box_width <= 0 or box_height <= 0:
+                                continue
 
-                    color = (45, 210, 75)
-                    cv2.rectangle(annotated, (bx1, by1), (bx2, by2), color, 2)
-                    label = f"{class_name} {confidence:.0%}"
-                    label_y = max(20, by1 - 7)
-                    cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.52, (20, 20, 20), 3, cv2.LINE_AA)
-                    cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.52, color, 1, cv2.LINE_AA)
-                    records.append({
-                        "Component": class_name,
-                        "Confidence": round(confidence, 3),
-                        "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
-                        "_box": [bx1, by1, bx2, by2],
-                    })
+                            candidates.append({
+                                "Component": class_name,
+                                "Confidence": confidence,
+                                "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
+                                "_box": [bx1, by1, bx2, by2],
+                                "Model": model_config["label"],
+                            })
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                except requests.RequestException as error:
+                    status_code = getattr(getattr(error, "response", None), "status_code", None)
+                    detail = f"HTTP {status_code}" if status_code else "network request failed"
+                    model_errors.append(f"{model_config['label']}: {detail}")
+                except (ValueError, TypeError):
+                    model_errors.append(f"{model_config['label']}: invalid inference response")
 
-                st.session_state[result_key] = {
-                    "signature": repr(signature),
-                    "source_token": selected_token,
-                    "image": annotated,
-                    "records": records,
-                    "boxes": records,
-                    "model": model_id,
-                    "error": None,
-                }
-            except Exception as error:
-                st.error(
-                    "Hosted inference could not run. Check your API key, model endpoint, network connection, "
-                    f"and provider quota. Details: {error}"
-                )
+        # Merge duplicate predictions from the two models when the same class
+        # occupies almost the same region. Different classes are retained.
+        def box_iou(first, second):
+            ax1, ay1, ax2, ay2 = first
+            bx1, by1, bx2, by2 = second
+            ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+            ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+            intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+            area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
+            union = area_a + area_b - intersection
+            return intersection / union if union else 0.0
 
-    else:
-        model_path_text = st.text_input(
-            "Local YOLO weights path",
-            value="models/components.pt",
-            key="components_local_model_path",
-            help="Point this at a trained component-detection .pt file. The app never downloads weights automatically.",
-        )
-        local_confidence = float(confidence_threshold)
-        model_path = Path(model_path_text).expanduser()
-        if not model_path.is_absolute():
-            model_path = Path(__file__).resolve().parent / model_path
-        if importlib.util.find_spec("ultralytics") is None:
-            st.warning("Local YOLO requires Ultralytics. Install it with: pip install ultralytics")
-        elif not model_path.is_file():
-            st.info(
-                f"No weights file found at {model_path}. Download the dataset and train a model with "
-                "scripts/train_components_yolo.py, or choose the hosted Roboflow backend."
-            )
-        run_detection = st.button(
-            "Detect Components in the Whole Image",
-            type="primary",
-            key="components_run_local_detection",
-            disabled=(importlib.util.find_spec("ultralytics") is None or not model_path.is_file()),
-            width="stretch",
-        )
-        signature = (
-            "local", selected_token, str(model_path), local_confidence,
-        )
-        result_key = "components_full_scene_result"
+        merged_records = []
+        for candidate in sorted(candidates, key=lambda row: row["Confidence"], reverse=True):
+            normalized_class = candidate["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+            duplicate = False
+            for kept in merged_records:
+                kept_class = kept["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+                if normalized_class == kept_class and box_iou(candidate["_box"], kept["_box"]) >= 0.55:
+                    duplicate = True
+                    break
+            if not duplicate:
+                merged_records.append(candidate)
 
-        if run_detection:
-            try:
-                from ultralytics import YOLO
+        annotated = image_rgb.copy()
+        for record in merged_records:
+            bx1, by1, bx2, by2 = record["_box"]
+            class_name = record["Component"]
+            confidence = float(record["Confidence"])
+            color = (45, 210, 75)
+            cv2.rectangle(annotated, (bx1, by1), (bx2, by2), color, 2)
+            label = f"{class_name} {confidence:.0%}"
+            label_y = max(20, by1 - 7)
+            cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.52, (20, 20, 20), 3, cv2.LINE_AA)
+            cv2.putText(annotated, label, (bx1, label_y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.52, color, 1, cv2.LINE_AA)
 
-                with st.spinner("Running local YOLO inference..."):
-                    model = YOLO(str(model_path))
-                    source_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
-                    predictions = model.predict(
-                        source=source_bgr,
-                        conf=local_confidence,
-                        verbose=False,
-                    )
-                prediction = predictions[0]
-                annotated = cv2.cvtColor(prediction.plot(), cv2.COLOR_BGR2RGB)
-                records = []
-                boxes = prediction.boxes
-                if boxes is not None:
-                    for box in boxes:
-                        class_id = int(box.cls[0].item())
-                        names = prediction.names
-                        class_name = str(names.get(class_id, class_id) if isinstance(names, dict) else names[class_id])
-                        confidence = float(box.conf[0].item())
-                        coords = box.xyxy[0].cpu().numpy().astype(int).tolist()
-                        records.append({
-                            "Component": class_name,
-                            "Confidence": round(confidence, 3),
-                            "Bounding box (x1, y1, x2, y2)": ", ".join(map(str, coords)),
-                            "_box": coords,
-                        })
-                st.session_state[result_key] = {
-                    "signature": repr(signature),
-                    "source_token": selected_token,
-                    "image": annotated,
-                    "records": records,
-                    "boxes": records,
-                    "model": str(model_path),
-                    "error": None,
-                }
-            except Exception as error:
-                st.error(f"Local YOLO detection failed: {error}")
+        st.session_state[result_key] = {
+            "signature": repr(signature),
+            "source_token": selected_token,
+            "image": annotated,
+            "records": merged_records,
+            "boxes": merged_records,
+            "model": " + ".join(model_ids),
+            "warnings": model_errors,
+            "error": None,
+        }
 
     saved_detection = st.session_state.get("components_full_scene_result")
     if saved_detection and saved_detection.get("signature") == repr(signature):
         st.subheader("Detected Components")
+        for warning in saved_detection.get("warnings", []):
+            st.warning(f"Some predictions may be missing: {warning}")
         st.image(saved_detection["image"], width="stretch")
         st.metric("Components detected", len(saved_detection["records"]))
+        if not saved_detection["records"]:
+            st.info(
+                "No components were found above the selected confidence threshold. "
+                "Try a sharper, brighter image with components separated from the background, "
+                "or lower the confidence threshold."
+            )
         if saved_detection["records"]:
             visible_records = [
                 {key: value for key, value in row.items() if not key.startswith("_")}
