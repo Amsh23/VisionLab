@@ -644,6 +644,18 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     purpose = "Provides an electrical connection for power or signals between circuit sections."
                 elif "ic" in lowered_name or "integrated circuit" in lowered_name:
                     purpose = "An integrated circuit; its function depends on the part and may include logic, control, amplification, or processing."
+                elif "esp32" in lowered_name:
+                    purpose = "A Wi-Fi/Bluetooth-capable microcontroller board commonly used for connected sensors, automation, and embedded IoT projects."
+                elif "arduino" in lowered_name:
+                    purpose = "A microcontroller development board commonly used to prototype sensor inputs, actuators, and embedded control."
+                elif "raspberry pi" in lowered_name or "raspberrypi" in lowered_name:
+                    purpose = "A small single-board computer commonly used for Linux-based IoT gateways, edge processing, and hardware prototyping."
+                elif "breadboard" in lowered_name:
+                    purpose = "A reusable, solderless prototyping board used to connect and test circuits before soldering."
+                elif "sensor" in lowered_name:
+                    purpose = "Measures a physical quantity such as temperature, humidity, motion, distance, or light; the exact role depends on the sensor model."
+                elif "development board" in lowered_name or "microcontroller" in lowered_name or "iot" in lowered_name or "board" in lowered_name:
+                    purpose = "An embedded development platform used to connect sensors and actuators, run firmware, and prototype IoT systems."
                 else:
                     purpose = "The model suggests a visual label only. Check the part number and circuit to identify its exact function."
                 st.caption(f"Typical use: {purpose}")
