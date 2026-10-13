@@ -157,16 +157,16 @@ If training memory is limited, reduce `--batch` to `4` or `2`. A GPU is recommen
 
 ## Use your trained model
 
-Run VisionLab from a machine where the weights file exists. In **Electronic Component Analyzer → Detection backend → Local YOLO weights**, set one of these paths:
+Run VisionLab from a machine where the weights file exists. The main Electronic Component Analyzer calls `electronics-components-sveck/7` and `iot_dataset/2` automatically through hosted inference. There is no model-backend selector in that view.
+
+These separate weights remain useful for local experiments:
 
 - **models/components.pt** for loose electronic components.
 - **models/iot_components.pt** for the supplied Roboflow IoT_Dataset labels.
 - **models/iot_boards.pt** for the separate IoTKITs board/kit labels.
 - **models/resistor_seg.pt** for a YOLO segmentation model trained on converted resistor masks; select it in the resistor reader's `Local YOLO segmentation model` method.
 
-These are separate models and will return the class names they were trained with. Use a model with the task and image domain that match your input.
-
-Model weights are excluded from Git by default. For Streamlit Cloud deployment, the weights must be provided separately or intentionally versioned. Do not commit a large raw dataset or a large .pt file without considering GitHub's file-size limits; use Git LFS or model storage for large assets. The app's hosted Roboflow mode can remain available without deploying a local model.
+Raw datasets and generated model weights are not committed by default because they can make the Git history large and may have redistribution requirements. The download scripts keep datasets local and preserve source attribution. For an offline deployed detector, train a model separately and deliberately arrange model hosting/versioning; hosted inference does not train a model on the downloaded data.
 
 ## Resistor color recognition is a different task
 
