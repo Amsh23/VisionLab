@@ -83,8 +83,11 @@ A detector finding a resistor does **not** automatically measure its resistance.
 
 1. Open https://share.streamlit.io/ and choose **Create app**.
 2. Select repository **Amsh23/VisionLab**, branch **main**, and main file path **app.py**.
-3. Deploy the app.
-4. To enable hosted full-scene detection, open app settings and add the `ROBOFLOW_API_KEY` secret shown above.
+3. In **Advanced settings**, select **Python 3.12**. The dependency versions are validated in the repository's Python 3.12 CI environment.
+4. Deploy the app.
+5. To enable hosted full-scene detection, open app settings and add the `ROBOFLOW_API_KEY` secret shown above.
+
+If the app already exists and it was deployed with Python 3.14, Community Cloud requires deleting and redeploying the app to change its Python version. Save its URL/subdomain and secrets first, then select Python 3.12 in Advanced settings during redeployment. See [Streamlit's Python-version instructions](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/upgrade-python).
 
 The image-processing modules and manual resistor decoder work without the Roboflow key. Hosted object detection needs the key and network access; local YOLO mode needs Ultralytics and a compatible local .pt weights file.
 
