@@ -320,6 +320,88 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
     selected.sort(key=lambda run: run["center"])
     return selected, raw_runs
 
+YOLO_BAND_COLOR_ALIASES = {
+    **{color.casefold(): color for color in BAND_COLORS_RGB},
+    "broan": "Brown",
+    "grey": "Gray",
+    "purple": "Violet",
+}
+
+
+def detect_band_runs_yolo(
+    roi_rgb: np.ndarray,
+    model_path: str | Path,
+    expected_count: int,
+    confidence_threshold: float = 0.15,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Run a locally trained YOLO segmentation/detection model on one resistor crop.
+
+    Only predictions whose class names match resistor band colors are used as
+    bands. Other model classes (such as whole-resistor value labels) are kept
+    as extra predictions for display, not silently decoded as colors.
+    """
+    if importlib.util.find_spec("ultralytics") is None:
+        raise RuntimeError(
+            "Ultralytics is not installed in this environment. Install the local training "
+            "environment with: python -m pip install -r requirements-training.txt"
+        )
+
+    model_file = Path(model_path).expanduser()
+    if not model_file.is_file():
+        raise FileNotFoundError(
+            f"Segmentation weights were not found at {model_file}. Train a model first or select another path."
+        )
+
+    from ultralytics import YOLO
+
+    model = YOLO(str(model_file))
+    image_bgr = cv2.cvtColor(roi_rgb, cv2.COLOR_RGB2BGR)
+    predictions = model.predict(source=image_bgr, conf=float(confidence_threshold), verbose=False)
+    if not predictions:
+        return [], [], []
+
+    prediction = predictions[0]
+    names = prediction.names
+    boxes = prediction.boxes
+    color_candidates: list[dict] = []
+    other_predictions: list[dict] = []
+
+    if boxes is not None:
+        for box in boxes:
+            class_id = int(box.cls[0].item())
+            class_name = str(
+                names.get(class_id, class_id) if isinstance(names, dict) else names[class_id]
+            ).strip()
+            confidence = float(box.conf[0].item())
+            coords = box.xyxy[0].cpu().numpy().astype(float).tolist()
+            left, top, right, bottom = coords
+            record = {
+                "class": class_name,
+                "confidence": confidence,
+                "box": coords,
+            }
+            normalized_name = class_name.casefold().strip()
+            canonical_color = YOLO_BAND_COLOR_ALIASES.get(normalized_name)
+            if canonical_color is not None:
+                color_candidates.append({
+                    "color": canonical_color,
+                    "start": max(0, int(round(left))),
+                    "end": min(roi_rgb.shape[1], max(int(round(left)) + 1, int(round(right)))),
+                    "center": (left + right) / 2,
+                    "width": max(1, right - left),
+                    "confidence": confidence,
+                    "score": confidence * max(1.0, bottom - top),
+                })
+            else:
+                other_predictions.append(record)
+
+    # Sort by confidence first to suppress accidental duplicate/low-quality
+    # color detections, then restore the physical left-to-right band sequence.
+    chosen = sorted(color_candidates, key=lambda item: item["score"], reverse=True)[:expected_count]
+    chosen.sort(key=lambda item: item["center"])
+    return chosen, color_candidates, other_predictions
+
+
 def annotate_bands(roi_rgb: np.ndarray, runs: list[dict], labels: list[str]) -> np.ndarray:
     """Draw band boxes and readable labels on a copy of the cropped image."""
     output = roi_rgb.copy()
