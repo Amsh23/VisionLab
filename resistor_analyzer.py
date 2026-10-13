@@ -380,7 +380,13 @@ def detect_band_runs_yolo(
                 "confidence": confidence,
                 "box": coords,
             }
-            normalized_name = class_name.casefold().strip()
+            normalized_name = (
+                class_name.casefold()
+                .replace("band:", "")
+                .replace(" color", "")
+                .replace(" band", "")
+                .strip()
+            )
             canonical_color = YOLO_BAND_COLOR_ALIASES.get(normalized_name)
             if canonical_color is not None:
                 color_candidates.append({
@@ -982,7 +988,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     )
                 else:
                     result["decoded"] = decode_band_sequence(result["bands"], int(band_count))
-        except (ValueError, cv2.error, IndexError, TypeError) as error:
+        except (ValueError, cv2.error, IndexError, TypeError, RuntimeError, OSError, ImportError) as error:
             result["error"] = str(error)
             result.setdefault("annotated", roi.copy())
 
