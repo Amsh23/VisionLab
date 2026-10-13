@@ -44,15 +44,32 @@ jobs:
         run: |
           python -c "import cv2, numpy, streamlit, PIL, sklearn, matplotlib, pandas, inference_sdk"
 
-      - name: Smoke-test Streamlit startup
+      - name: Smoke-test every Streamlit page
         run: |
           python - <<'PY'
           from streamlit.testing.v1 import AppTest
 
+          pages = [
+              "Home",
+              "Electronic Component Analyzer",
+              "Image Fundamentals",
+              "Image Processing & Filters",
+              "Edge & Shape Detection",
+              "Color Detection",
+              "Feature Detection",
+              "Image Matching",
+              "Image Segmentation",
+              "Object Detection (YOLO)",
+              "Video Processing",
+              "Machine Learning Demo",
+          ]
+
           app = AppTest.from_file("app.py", default_timeout=30).run()
-          if len(app.exception) > 0:
-              raise SystemExit(f"Streamlit startup raised an exception: {app.exception!r}")
-          print("Streamlit app started successfully.")
+          for page in pages:
+              app.radio[0].set_value(page).run()
+              if len(app.exception) > 0:
+                  raise SystemExit(f"Streamlit page {page!r} raised an exception: {app.exception!r}")
+          print(f"All {len(pages)} Streamlit pages started successfully.")
           PY
 
       - name: Validate dev-container JSON
