@@ -17,6 +17,7 @@ data/iotkits_raw/
 data/iotkits_yolo/
 data/iot_roboflow/
 data/resistor_value_segmentation/
+data/resistor_seg_yolo/
 data/resistor_kaggle_raw/
 data/pcb_component_dataset/
 
