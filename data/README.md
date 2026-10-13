@@ -1,27 +1,27 @@
-# Resistor datasets
+# Datasets for VisionLab
 
-This folder contains a small, standards-based resistor color-code reference table used by the VisionLab Electronic Component Analyzer.
+## Resistor color-code reference
 
-## Reference dataset
+- `resistor_color_reference.csv` maps standard band colors to digit, multiplier, common tolerance, and reference RGB values.
+- `synthetic_resistors/images/` contains 12 small generated resistor illustrations. Their expected band colors and resistance values are stored in `synthetic_resistors/labels.csv`.
+- Run `python scripts/generate_resistor_dataset.py --count 300 --output data/generated_resistor_dataset` to generate a larger synthetic training/demo set.
 
-- `resistor_color_reference.csv` lists the ten digit colors, their multipliers, common tolerance values, and reference color swatches.
-- These are reference values, not photographs and not a trained machine-learning model.
-- `synthetic_resistors/images/` contains 12 small synthetic PNG samples. Their labels and expected resistor values are in `synthetic_resistors/labels.csv`. These are illustrative generated images, not photographs of physical resistors.
+The synthetic data is useful for testing parsing and data pipelines but is not a substitute for real camera photographs.
 
-## Generate an image dataset
+## Full electronic component detection dataset
 
-Install the project's core dependencies, then run this from the repository root:
+Recommended source: [Electronics components dataset and YOLO model on Roboflow Universe](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck).
 
-```bash
-python scripts/generate_resistor_dataset.py --count 300 --output data/generated_resistor_dataset
-```
+The dataset page lists approximately 8,248 images and ten component categories, including resistor, capacitor, diode, inductor, transistor, cable, crystal oscillator, IC, LED, and potentiometer. The project page lists the dataset license as CC BY 4.0; check the source page for any updates before use or redistribution.
 
-The script creates `images/` with synthetic 4-band and 5-band resistor images plus `labels.csv` with exact band labels, resistance values, tolerance values, and train/validation/test splits.
+The complete dataset is not vendored into this GitHub repository because thousands of images can make the app repo unnecessarily large, and users should retrieve the chosen version from the provider so its attribution/version information remains clear.
 
-**Important limitation:** these images are procedurally drawn and do not represent real photographs. They are useful for demos, testing label parsing, and explaining data pipelines, but they should not be used as the only training or evaluation set for a real-world vision model. Collect real photos with varied cameras, backgrounds, orientations, and lighting before claiming practical accuracy.
+### Download and train
 
-## Real component-detection dataset
+1. Create a Roboflow account and create an API key at https://app.roboflow.com/settings/api.
+2. Install optional development dependencies with `python -m pip install roboflow ultralytics`.
+3. Set the `ROBOFLOW_API_KEY` environment variable.
+4. Run `python scripts/download_component_dataset.py`.
+5. Train with `python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --epochs 40`.
 
-For training a model to locate resistors among other electronic parts, see the public [Electronic Components 8 Classes dataset on Roboflow Universe](https://universe.roboflow.com/electronic-components-dataset-for-yolo/electronic-components-8-classes). Its page lists a CC BY 4.0 license and classes for resistor, capacitor, diode, and several component/value categories. Review the current dataset version and attribution instructions before redistributing an export.
-
-A detector that finds a resistor is not the same as a model that reads its color bands. For a general-purpose application, train and evaluate these two stages separately.
+For Streamlit deployment, the hosted detection option uses the model endpoint electronics-components-sveck/7 and reads the key from Streamlit secrets. A detector labels the component class; reading resistor bands is a separate image-analysis task.
