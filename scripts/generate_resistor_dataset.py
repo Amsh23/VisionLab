@@ -143,7 +143,7 @@ def main() -> None:
         bands, resistance_ohms, tolerance = create_band_sequence(random_generator, band_count)
         rgb_image = render_synthetic_resistor(bands, random_generator, numpy_generator)
         filename = f"resistor_{index + 1:05d}.jpg"
-        Image.fromarray(rgb_image, mode="RGB").save(images_directory / filename, format="JPEG", quality=94)
+        Image.fromarray(rgb_image).save(images_directory / filename, format="JPEG", quality=94)
 
         row = {
             "image": f"images/{filename}",
