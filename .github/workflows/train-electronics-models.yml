@@ -66,5 +66,25 @@ jobs:
             echo "No new model files were available to publish."
             exit 0
           fi
+          # Training can take a long time; another source commit may land meanwhile.
+          # Rebase the publish commit on the latest main while preserving generated files.
+          git fetch origin main
+          git reset --mixed origin/main
+          for file in \
+            models/components.pt \
+            models/iot_components.pt \
+            models/iot_boards.pt \
+            models/resistor_seg.pt \
+            models/resistor_band_classifier.joblib \
+            models/resistor_band_classifier.metrics.json \
+            models/training-report.json; do
+            if [ -f "$file" ]; then
+              git add -f "$file"
+            fi
+          done
+          if git diff --cached --quiet; then
+            echo "No new model files were available to publish."
+            exit 0
+          fi
           git commit -m "Add trained VisionLab model checkpoints"
           git push origin HEAD:main

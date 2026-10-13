@@ -77,7 +77,7 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
         "--data", str(data_file),
         "--model", "yolo11n-seg.pt" if segmentation else "yolo11n.pt",
         "--epochs", str(epochs),
-        "--imgsz", "416",
+        "--imgsz", "512",
         "--batch", "4" if segmentation else "8",
         "--device", "cpu",
         "--project", f"runs/{name}",
@@ -107,7 +107,7 @@ def train_electronics(report: dict) -> None:
         data_file,
         MODELS / "components.pt",
         "electronics",
-        epochs=8,
+        epochs=30,
         segmentation=False,
     )
     report["models"].append({
@@ -133,6 +133,19 @@ def train_iot(report: dict) -> None:
                 dataset_name = "Roboflow IoT_Dataset"
         except Exception as error:
             report["warnings"].append(f"Roboflow IoT download: {type(error).__name__}")
+
+    if data_file is None and not key:
+        report["warnings"].append(
+            "Local IoT training skipped: GitHub Actions secret ROBOFLOW_API_KEY is not configured. "
+            "The supplied Roboflow IoT_Dataset contains annotations but no hosted model; its dataset export "
+            "needs the Actions secret. The Streamlit app uses a separate already-trained public IoT model."
+        )
+        print(
+            "WARNING: no GitHub Actions ROBOFLOW_API_KEY; skipping local IoT dataset export instead of "
+            "calling the Mendeley endpoint that returned HTTP 403.",
+            flush=True,
+        )
+        return
 
     if data_file is None:
         try:
@@ -167,7 +180,7 @@ def train_iot(report: dict) -> None:
         data_file,
         model_path,
         "iot",
-        epochs=20 if dataset_name == "Roboflow IoT_Dataset" else 4,
+        epochs=40 if dataset_name == "Roboflow IoT_Dataset" else 20,
         segmentation=False,
     )
     report["models"].append({

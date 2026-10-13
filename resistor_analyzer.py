@@ -7,6 +7,7 @@ from pathlib import Path
 import csv
 import hashlib
 import importlib.util
+import tempfile
 
 import cv2
 import requests
@@ -571,9 +572,13 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
         },
         {
-            "id": "iot_dataset/2",
+            # The supplied IoT_Dataset is a dataset-only project (Roboflow shows Models: 0),
+            # so requesting /iot_dataset/2 from detect.roboflow.com returns HTTP 404.
+            # Use this existing trained 58-class IoT/electronics model instead.
+            "id": "iot-components-learning-ogliq/1",
+            "api_url": "https://serverless.roboflow.com",
             "label": "Hosted IoT Components",
-            "source": "https://universe.roboflow.com/design-project-zeico/iot_dataset",
+            "source": "https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq",
         },
     ]
 
@@ -691,18 +696,39 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 jpeg_bytes = image_buffer.getvalue()
                 for model_config in hosted_models:
                     try:
-                        response = requests.post(
-                            f"https://detect.roboflow.com/{model_config['id']}",
-                            params={
-                                "api_key": api_key,
-                                "confidence": max(10, int(round(float(confidence_threshold) * 100))),
-                                "overlap": 35,
-                            },
-                            files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
-                            timeout=60,
-                        )
-                        response.raise_for_status()
-                        prediction_payload = response.json()
+                        if model_config.get("api_url") == "https://serverless.roboflow.com":
+                            # Current Roboflow-hosted models use the serverless inference SDK.
+                            from inference_sdk import InferenceHTTPClient, InferenceConfiguration
+
+                            client = InferenceHTTPClient(
+                                api_url=model_config["api_url"],
+                                api_key=api_key,
+                            ).configure(
+                                InferenceConfiguration(api_key_transport="header")
+                            )
+                            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
+                                image_file.write(jpeg_bytes)
+                                image_path = image_file.name
+                            try:
+                                prediction_payload = client.infer(
+                                    image_path,
+                                    model_id=model_config["id"],
+                                )
+                            finally:
+                                Path(image_path).unlink(missing_ok=True)
+                        else:
+                            response = requests.post(
+                                f"https://detect.roboflow.com/{model_config['id']}",
+                                params={
+                                    "api_key": api_key,
+                                    "confidence": max(10, int(round(float(confidence_threshold) * 100))),
+                                    "overlap": 35,
+                                },
+                                files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
+                                timeout=60,
+                            )
+                            response.raise_for_status()
+                            prediction_payload = response.json()
                         if not isinstance(prediction_payload, dict):
                             raise ValueError("invalid JSON object")
                         predictions = prediction_payload.get("predictions", [])
@@ -740,6 +766,12 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                         model_errors.append(f"{model_config['label']}: {detail}")
                     except (ValueError, TypeError):
                         model_errors.append(f"{model_config['label']}: invalid response")
+                    except Exception as error:
+                        # SDK exceptions vary by version; only expose a status/type, never request details.
+                        status_code = getattr(getattr(error, "response", None), "status_code", None)
+                        status_code = status_code or getattr(error, "status_code", None)
+                        detail = f"HTTP {status_code}" if status_code else type(error).__name__
+                        model_errors.append(f"{model_config['label']}: {detail}")
 
         # Merge duplicate predictions only when their class names and boxes overlap.
         def box_iou(first, second):

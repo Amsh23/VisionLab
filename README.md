@@ -42,7 +42,7 @@ Open **Electronic Component Analyzer** from the sidebar.
 The analyzer automatically runs two hosted Roboflow models and merges overlapping same-class predictions:
 
 - **Electronics Components, version 7** — loose parts such as resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, cables, crystal oscillators, and potentiometers.
-- **IoT Dataset, version 2** — a complementary set of IoT devices and learning components, including Arduino, jumper wires, resistors, transistors, capacitors, and an ultrasonic sensor.
+- **IoT Components Learning, version 1** — an existing trained 58-class hosted model for Arduino boards, ESP32/ESP32-CAM, components, sensors, and modules.
 
 These are separate model classes and are not a universal detector for every electronic part. Their accuracy depends on image quality and similarity to their training images. Test with independent photos from your own setup; no accuracy guarantee is implied.
 
@@ -59,10 +59,10 @@ There is no API-key input in the user interface. The selected image is sent to b
 The repository includes a GitHub Actions workflow that downloads public datasets, trains small local checkpoints, and publishes available model files to `models/` on the default branch. Training uses CPU runners and compact YOLO models/short runs as an initial baseline; it is not a substitute for full training and real-world validation.
 
 - The electronics detector uses the public Circuit Elements YOLO dataset as a no-key fallback; if a GitHub Actions repository secret named `ROBOFLOW_API_KEY` is configured, the workflow tries the larger Roboflow Electronics Components dataset first.
-- The IoT detector uses the Roboflow `iot_dataset` when the Actions secret is available; otherwise it downloads IoTKITs and converts supported annotations.
+- The supplied Roboflow `iot_dataset` is a dataset-only project (Roboflow currently shows 0 trained models), so it cannot be called as a hosted inference endpoint. A separate existing public model, `iot-components-learning-ogliq/1`, is used for hosted IoT predictions. Local IoT training from your supplied dataset requires the `ROBOFLOW_API_KEY` GitHub Actions secret; without it, the workflow records that local IoT training was skipped rather than treating a failed download as success.
 - The resistor task trains a separate 12-color patch classifier. Without the Actions secret, its initial training examples are synthetic, so its synthetic test score must not be presented as real-photo accuracy. If the secret is available, the workflow also tries the public Roboflow resistor-band segmentation dataset and trains `models/resistor_seg.pt`.
 
-**Important:** Streamlit Community Cloud secrets and GitHub Actions secrets are separate. Your existing `ROBOFLOW_API_KEY` inside Streamlit is not automatically exposed to GitHub Actions. To enable the real Roboflow training datasets, add the same key under **GitHub → Settings → Secrets and variables → Actions** as `ROBOFLOW_API_KEY`. Never commit the key in a file.
+**Important:** Streamlit Community Cloud secrets and GitHub Actions secrets are separate. Your `ROBOFLOW_API_KEY` inside Streamlit is not automatically exposed to GitHub Actions. To train from the supplied Roboflow datasets and publish local weights, add the same key under **GitHub → Settings → Secrets and variables → Actions** as `ROBOFLOW_API_KEY`. Never commit the key in a file.
 
 Raw datasets remain excluded from Git. The workflow publishes compact trained checkpoints only, so Streamlit can load them after its next deployment/restart. Training is not complete until the GitHub Actions run is green and the resulting model files appear in `models/`.
 

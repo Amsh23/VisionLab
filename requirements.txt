@@ -7,3 +7,4 @@ scikit-learn
 pandas
 requests
 ultralytics>=8.3,<9
+inference-sdk>=0.9.30,<1

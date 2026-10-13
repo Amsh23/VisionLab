@@ -21,10 +21,18 @@ VisionLab uses two different computer-vision tasks, so train and evaluate separa
 - **Source:** [Design Project — IoT_Dataset](https://universe.roboflow.com/design-project-zeico/iot_dataset)
 - **Reported size:** 209 images across seven classes: Arduino, Capacitor, IoT-Devices, Jumper Wires, Resistor, Transistor, and Ultrasonic Sensor.
 - **License shown on the source page:** MIT.
-- **Dataset version:** the project page displays two versions; the downloader preset selects version 2. Verify the class mapping and image count after export.
+- **Dataset version:** version 2. The project currently shows **Models: 0** on Roboflow Universe, so it is not a valid hosted inference model ID. Export its labels and train a local detector, or use the existing trained IoT Components Learning model in the app.
 - **Download:** `scripts/download_roboflow_dataset.py --dataset iot`, format `yolov8`.
 
 This is a useful starting point, but 209 images is small. Evaluate with independent photos from your own workbench. Do not merge this dataset blindly with the larger general-components dataset: overlapping classes such as `IoT-Devices` and specific board labels need a consistent unified label map.
+
+
+### Hosted IoT model fallback (working inference endpoint)
+
+- **Source:** [Roboflow Universe — IoT Components Learning](https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq)
+- **Model ID:** `iot-components-learning-ogliq/1` (serverless inference API).
+- **Published model-card metrics:** mAP@50 94.3%, precision 93.1%, recall 93.8% across 58 classes. These are the publisher's reported metrics, not a VisionLab independent test.
+- **Usage:** the Streamlit analyzer calls this existing model through Roboflow's serverless inference SDK because the supplied `design-project-zeico/iot_dataset` has no hosted model (Model 0). Source page: https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq
 
 ### 3. Resistor Value Determination (your supplied Roboflow source)
 
