@@ -28,6 +28,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Validate GitHub Actions workflow syntax
+        shell: bash
+        run: |
+          version="$(curl -fsSL https://api.github.com/repos/rhysd/actionlint/releases/latest | python -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          archive="/tmp/actionlint.tar.gz"
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/${version}/actionlint_${version#v}_linux_amd64.tar.gz" -o "$archive"
+          tar -xzf "$archive" -C /tmp actionlint
+          /tmp/actionlint .github/workflows/*.yml
+
       - name: Check Python syntax
         run: python -m compileall -q app.py resistor_analyzer.py scripts tests
 
