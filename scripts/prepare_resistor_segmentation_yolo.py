@@ -38,12 +38,20 @@ def is_mask_path(path: Path) -> bool:
 
 
 def list_images(root: Path) -> list[Path]:
-    candidates = [
-        path for path in root.rglob("*")
-        if path.is_file()
-        and path.suffix.lower() in IMAGE_SUFFIXES
-        and not is_mask_path(path)
-    ]
+    candidates = []
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        if is_mask_path(path):
+            continue
+        # In flat Roboflow semantic exports, a JPEG image and a PNG mask can
+        # share the same stem. Do not treat that PNG mask as a second source image.
+        if path.suffix.lower() == ".png" and any(
+            path.with_suffix(suffix).is_file()
+            for suffix in (".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff")
+        ):
+            continue
+        candidates.append(path)
     return sorted(candidates)
 
 
