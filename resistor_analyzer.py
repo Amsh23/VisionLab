@@ -916,12 +916,12 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     elif index == int(band_count) - 2:
                         multiplier = MULTIPLIER_OHMS.get(color)
                         role = "Multiplier"
-                        encoded = f"×{multiplier:g}" if multiplier is not None else "نامعتبر"
+                        encoded = f"×{multiplier:g}" if multiplier is not None else "Invalid"
                         meaning = f"Multiply the previous digits by {multiplier:g}." if multiplier is not None else "This is not a valid multiplier color."
                     else:
                         tolerance = TOLERANCE_PERCENT.get(color)
                         role = "Tolerance"
-                        encoded = f"±{tolerance:g}%" if tolerance is not None else "نامعتبر"
+                        encoded = f"±{tolerance:g}%" if tolerance is not None else "Invalid"
                         meaning = (
                             f"The actual resistance may differ from the nominal value by up to {tolerance:g}%."
                             if tolerance is not None
