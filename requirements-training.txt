@@ -11,3 +11,4 @@ pandas
 requests
 ultralytics>=8.3,<9
 roboflow>=1.1
+kaggle>=1.6
