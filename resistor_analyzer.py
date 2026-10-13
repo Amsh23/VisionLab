@@ -774,6 +774,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "python scripts/download_roboflow_dataset.py --dataset iot\n"
             "python scripts/train_components_yolo.py --data data/iot_roboflow/data.yaml --name iot_parts --weights-out models/iot_components.pt\n"
             "python scripts/download_roboflow_dataset.py --dataset resistor-segmentation\n"
+            "python scripts/prepare_resistor_segmentation_yolo.py --input data/resistor_value_segmentation --output data/resistor_seg_yolo --background-value 0\n"
+            "python scripts/train_components_yolo.py --data data/resistor_seg_yolo/data.yaml --model yolo11n-seg.pt --epochs 80 --batch 4 --name resistor_bands --weights-out models/resistor_seg.pt\n"
             "python scripts/download_kaggle_resistor_dataset.py",
             language="powershell",
         )
