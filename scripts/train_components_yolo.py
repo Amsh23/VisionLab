@@ -57,8 +57,9 @@ def main() -> None:
     if args.device:
         train_options["device"] = args.device
 
-    metrics = model.train(**train_options)
-    save_dir = Path(getattr(metrics, "save_dir", Path(args.project) / args.name))
+    model.train(**train_options)
+    trainer = getattr(model, "trainer", None)
+    save_dir = Path(getattr(trainer, "save_dir", Path(args.project) / args.name))
     best_weights = save_dir / "weights" / "best.pt"
 
     print(f"Training finished. Expected best weights: {best_weights}")
