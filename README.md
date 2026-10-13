@@ -1,6 +1,22 @@
-# VisionLab — Computer Vision Learning Studio
+# VisionLab — Electronic Component Analyzer
 
-VisionLab is a Streamlit application for learning classical OpenCV algorithms, feature matching, segmentation, video processing, machine learning, and electronic component detection.
+**The main project in VisionLab is the Electronic Component Analyzer** — a practical computer-vision application for identifying electronic components in a workbench photo and reading resistor color bands.
+
+Instead of presenting component detection as one isolated model demo, the project combines a photo/upload workflow, hosted or local object detection, resistor-region selection, adaptive color-band analysis, editable color suggestions, resistance/tolerance calculation, and short explanations of what the detected parts are commonly used for.
+
+The rest of VisionLab's OpenCV filters, feature matching, segmentation, video, and ML examples are supporting learning tools. They are not the project's main focus.
+
+## Main project: Electronic Component Analyzer
+
+### What makes this project useful
+- **Photo to component list:** capture a still photo with a webcam or upload an image of the workbench.
+- **Find components:** use the hosted Roboflow model, or a local YOLO weights file if you have one.
+- **Read resistor bands:** analyze standard 4-band and 5-band resistor color codes from a close crop.
+- **Human-reviewed color reading:** inspect or correct the suggested band colors before calculating the value.
+- **Explain the code:** show each band's digit, multiplier or tolerance, the resistance formula, the expected range, and common uses of the component.
+- **Learn from the output:** inspect the annotated image and download the result.
+
+**Project-specific contribution:** integrating component detection with an interactive resistor-reading workflow and understandable code explanations. The hosted component detector is a third-party Roboflow model; the project does not claim to have trained that hosted model from scratch. Automatic color reading is a classical OpenCV heuristic, so the displayed value is an estimate and should be checked with a multimeter when accuracy matters.
 
 ## Run locally
 
