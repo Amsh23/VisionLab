@@ -316,6 +316,7 @@ if page == "Home":
         ("Color Detection", "HSV ranges, binary masks, and color-based segmentation."),
         ("Feature Detection and Matching", "Harris, Shi-Tomasi, ORB, optional SIFT, BFMatcher and homography."),
         ("Image Segmentation", "Threshold segmentation, HSV masks, GrabCut foreground extraction, and K-means clustering."),
+        ("Electronic Component Analyzer", "Capture a workbench photo, detect components with the hosted or local model, and estimate resistor values from color bands."),
         ("Optional Extensions", "YOLO object detection, video frames, and a small scikit-learn digit-classification example."),
     ]
     for title, description in roadmap:
