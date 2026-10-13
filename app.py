@@ -60,12 +60,7 @@ def image_to_png_bytes(image: np.ndarray) -> bytes:
     prepared = display_ready_image(image)
     if prepared.dtype != np.uint8:
         prepared = np.clip(prepared, 0, 255).astype(np.uint8)
-    if prepared.ndim == 2:
-        pil_image = Image.fromarray(prepared, mode="L")
-    elif prepared.shape[2] == 4:
-        pil_image = Image.fromarray(prepared, mode="RGBA")
-    else:
-        pil_image = Image.fromarray(prepared, mode="RGB")
+    pil_image = Image.fromarray(prepared)
     buffer = BytesIO()
     pil_image.save(buffer, format="PNG")
     return buffer.getvalue()
@@ -88,10 +83,10 @@ def decode_uploaded_image(raw_bytes: bytes):
     with Image.open(BytesIO(raw_bytes)) as opened_image:
         image_format = opened_image.format or "Unknown"
         source_mode = opened_image.mode
+        has_alpha = "A" in opened_image.getbands() or "transparency" in opened_image.info
         oriented = ImageOps.exif_transpose(opened_image)
         rgba = np.array(oriented.convert("RGBA"), dtype=np.uint8, copy=True)
         rgb = np.array(oriented.convert("RGB"), dtype=np.uint8, copy=True)
-    has_alpha = "A" in source_mode or "transparency" in source_mode.lower()
     return rgb, (rgba if has_alpha else rgb.copy()), image_format, source_mode
 
 
@@ -181,8 +176,8 @@ def cached_operation(
 
 
 def clear_shared_image() -> None:
-    """Callback: clear the one global image and its cached results."""
-    st.session_state["global_image_uploader"] = None
+    """Callback: clear the shared image without assigning to a file-uploader widget."""
+    st.session_state["global_image_uploader_version"] = st.session_state.get("global_image_uploader_version", 0) + 1
     for key in ("original_image_bytes", "source_rgb", "source_rgba", "image_format",
                 "source_mode", "source_name", "source_token"):
         st.session_state.pop(key, None)
@@ -247,10 +242,11 @@ st.sidebar.divider()
 st.sidebar.markdown("### Shared Image")
 st.sidebar.caption("Upload once. The same image is available in every image module.")
 
+uploader_version = st.session_state.get("global_image_uploader_version", 0)
 uploaded_image = st.sidebar.file_uploader(
     "Choose an image",
     type=["png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff"],
-    key="global_image_uploader",
+    key=f"global_image_uploader_{uploader_version}",
     help="The first image is shared across all image modules. Image Matching has one additional uploader for the second image.",
 )
 
@@ -514,7 +510,6 @@ elif page == "Image Processing & Filters":
                                                           cv2.THRESH_BINARY, limit, int(params["constant"]))
                 return {"image": threshold}
             if method == "Histogram":
-                channels = cv2.calcHist([image], [0, 1, 2], None, [256, 256, 256], [0, 256, 0, 256, 0, 256]) if False else None
                 if image.ndim == 2:
                     values = {"Grayscale": cv2.calcHist([image], [0], None, [256], [0, 256]).ravel()}
                 else:
@@ -609,7 +604,9 @@ elif page == "Edge & Shape Detection":
         elif method == "Contours and Shapes":
             c1, c2 = st.columns(2)
             params["threshold"] = c1.slider("Binary threshold", 0, 255, 120, key="contour_threshold")
-            params["min_area"] = c2.slider("Minimum contour area (pixels)", 0, max(1, image.shape[0] * image.shape[1] // 2), max(10, min(500, image.shape[0] * image.shape[1] // 100)), key="contour_min_area")
+            area_limit = max(1, image.shape[0] * image.shape[1] // 2)
+            area_default = min(area_limit, max(10, min(500, image.shape[0] * image.shape[1] // 100)))
+            params["min_area"] = c2.slider("Minimum contour area (pixels)", 0, area_limit, area_default, key="contour_min_area")
         elif method == "Hough Lines":
             c1, c2, c3 = st.columns(3)
             params["threshold"] = c1.slider("Hough votes", 10, 200, 80, key="hough_line_votes")
@@ -772,10 +769,14 @@ elif page == "Color Detection":
             hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
             low_array = np.array(lower, dtype=np.uint8)
             high_array = np.array(upper, dtype=np.uint8)
-            if lower[0] <= upper[0]:
+            if preset == "Red":
+                red_tail = cv2.inRange(hsv, np.array([170, lower[1], lower[2]], dtype=np.uint8),
+                                       np.array([179, upper[1], upper[2]], dtype=np.uint8))
+                mask = cv2.bitwise_or(cv2.inRange(hsv, low_array, high_array), red_tail)
+            elif lower[0] <= upper[0]:
                 mask = cv2.inRange(hsv, low_array, high_array)
             else:
-                # A wrapped hue range, useful for reds near both ends of OpenCV's hue scale.
+                # A wrapped hue range, useful for custom red-like colors.
                 first = cv2.inRange(hsv, low_array, np.array([179, upper[1], upper[2]], dtype=np.uint8))
                 second = cv2.inRange(hsv, np.array([0, lower[1], lower[2]], dtype=np.uint8), high_array)
                 mask = cv2.bitwise_or(first, second)
