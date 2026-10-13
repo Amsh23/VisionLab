@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: visionlab-model-training
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   train-and-publish:

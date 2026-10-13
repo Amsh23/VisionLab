@@ -550,10 +550,23 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         {"path": model_root / "iot_components.pt", "label": "Trained IoT Model"},
         {"path": model_root / "iot_boards.pt", "label": "Trained IoT Board Model"},
     ]
-    available_local_models = [
-        item for item in candidate_local_models
-        if item["path"].is_file()
-    ]
+    use_experimental_local_models = st.checkbox(
+        "Include experimental local checkpoints",
+        value=False,
+        help=(
+            "Off by default: the early CI-trained local checkpoint has not yet passed "
+            "real-image validation. The app uses the published hosted detectors instead."
+        ),
+        key="include_experimental_local_checkpoints",
+    )
+    available_local_models = (
+        [
+            item for item in candidate_local_models
+            if item["path"].is_file()
+        ]
+        if use_experimental_local_models
+        else []
+    )
     local_model_signature = tuple(
         (item["label"], item["path"].name, item["path"].stat().st_size, item["path"].stat().st_mtime_ns)
         for item in available_local_models
@@ -568,6 +581,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     hosted_models = [
         {
             "id": "electronics-components-sveck/7",
+            "api_url": "https://serverless.roboflow.com",
             "label": "Hosted Electronics Components",
             "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
         },

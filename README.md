@@ -39,10 +39,10 @@ Open **Electronic Component Analyzer** from the sidebar.
 
 ### Detect components in the full image
 
-The analyzer automatically runs two hosted Roboflow models and merges overlapping same-class predictions:
+The analyzer runs two hosted Roboflow models through the serverless inference SDK and merges overlapping same-class predictions. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
 
 - **Electronics Components, version 7** — loose parts such as resistors, capacitors, diodes, inductors, transistors, LEDs, ICs, cables, crystal oscillators, and potentiometers.
-- **IoT Components Learning, version 1** — an existing trained 58-class hosted model for Arduino boards, ESP32/ESP32-CAM, components, sensors, and modules.
+- **IoT Components Learning, version 1** — an existing trained 58-class hosted model for Arduino boards, ESP32/ESP32-CAM, components, sensors, and modules. Its publisher reports mAP@50 94.3%; VisionLab has not independently reproduced that benchmark.
 
 These are separate model classes and are not a universal detector for every electronic part. Their accuracy depends on image quality and similarity to their training images. Test with independent photos from your own setup; no accuracy guarantee is implied.
 
