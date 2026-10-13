@@ -42,7 +42,7 @@ jobs:
 
       - name: Check libraries
         run: |
-          python -c "import cv2, numpy, streamlit, PIL, sklearn, matplotlib, pandas"
+          python -c "import cv2, numpy, streamlit, PIL, sklearn, matplotlib, pandas, inference_sdk"
 
       - name: Run resistor decoder tests
         run: python -m unittest discover -s tests -v

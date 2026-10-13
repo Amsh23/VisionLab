@@ -1,20 +1,64 @@
 {
-  "timestamp_utc": "2026-10-13T15:22:50.547389+00:00",
+  "last_completed_training_run": "https://github.com/Amsh23/VisionLab/actions/runs/38421277344",
+  "timestamp_utc": "2026-10-13T15:22:50Z",
   "models": [
     {
       "file": "models/components.pt",
       "dataset": "LibreYOLO Circuit Elements",
-      "task": "electronics component detection"
+      "training": {
+        "epochs": 8,
+        "image_size": 416,
+        "device": "CPU"
+      },
+      "validation": {
+        "precision": 0.598,
+        "recall": 0.0605,
+        "mAP50": 0.0423,
+        "mAP50_95": 0.0181
+      },
+      "status": "baseline_only_not_recommended_by_default",
+      "warning": "Validation recall and mAP are low. The Streamlit app keeps local experimental checkpoints disabled by default and uses the hosted detector instead."
     },
     {
       "file": "models/resistor_band_classifier.joblib",
       "dataset": "Augmented synthetic color-band patches",
       "task": "12-class resistor-band patch color classification",
-      "warning": "Synthetic-only metrics are not estimates of accuracy on real resistor photographs."
+      "training_samples": 9600,
+      "test_samples": 2400,
+      "synthetic_test_accuracy": 0.92625,
+      "status": "experimental_synthetic_only",
+      "warning": "The test set is synthetic, not independent real resistor photographs. This score is not a real-photo accuracy estimate."
+    },
+    {
+      "file": "Hosted model iot-components-learning-ogliq/1",
+      "dataset": "Roboflow Universe IoT Components Learning",
+      "classes": 58,
+      "source": "https://universe.roboflow.com/robertos-workspace-zpauf/iot-components-learning-ogliq",
+      "publisher_reported_metrics": {
+        "mAP50": 0.943,
+        "precision": 0.931,
+        "recall": 0.938
+      },
+      "status": "hosted_inference_model",
+      "warning": "Metrics are publisher-reported and were not independently reproduced by VisionLab."
+    },
+    {
+      "file": "Hosted model electronics-components-sveck/7",
+      "dataset": "Roboflow Universe Electronics Components",
+      "classes": 10,
+      "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
+      "publisher_reported_metrics": {
+        "mAP50": 0.918,
+        "precision": 0.945,
+        "recall": 0.845
+      },
+      "status": "hosted_inference_model",
+      "warning": "Metrics are publisher-reported and were not independently reproduced by VisionLab."
     }
   ],
   "warnings": [
-    "IoTKITs download or annotation conversion: RuntimeError",
-    "Real-photo resistor-band segmentation was skipped because the GitHub Actions ROBOFLOW_API_KEY secret is not configured."
+    "IoTKITs dataset download failed with HTTP 403 during the last completed training run.",
+    "GitHub Actions secret ROBOFLOW_API_KEY was absent, so the supplied Roboflow datasets could not be downloaded for local IoT or real-photo resistor-band training.",
+    "The last full training run completed successfully as a workflow, but only the electronics baseline and synthetic resistor classifier were produced. It must not be described as full dataset training."
   ]
 }
