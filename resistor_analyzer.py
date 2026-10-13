@@ -654,30 +654,30 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 st.markdown(f"**{number}. {component_name} — {confidence_percent:.0f}% confidence**")
                 lowered_name = component_name.casefold()
                 if "resistor" in lowered_name or "resister" in lowered_name:
-                    purpose = "محدود کردن جریان، تقسیم ولتاژ و تنظیم بایاس؛ مقدار اهم از روی نوارهای رنگی خوانده می‌شود."
+                    purpose = "Limits current, divides voltage, and sets circuit bias; the resistance value is decoded from its color bands."
                 elif "capacitor" in lowered_name or "condens" in lowered_name:
-                    purpose = "ذخیرهٔ موقت بار الکتریکی؛ برای صاف‌کردن ولتاژ، فیلتر نویز و کوپلاژ سیگنال کاربرد دارد."
+                    purpose = "Temporarily stores electric charge; commonly used for voltage smoothing, noise filtering, and signal coupling."
                 elif "diode" in lowered_name:
-                    purpose = "عبور جریان عمدتاً در یک جهت؛ در یکسوسازی و محافظت از قطبیت استفاده می‌شود."
+                    purpose = "Allows current to flow mainly in one direction; used for rectification and reverse-polarity protection."
                 elif "inductor" in lowered_name or "coil" in lowered_name:
-                    purpose = "ذخیرهٔ انرژی در میدان مغناطیسی؛ در فیلترها و مبدل‌های تغذیه کاربرد دارد."
+                    purpose = "Stores energy in a magnetic field; used in filters and power converters."
                 elif "transistor" in lowered_name:
-                    purpose = "برای سوئیچ‌کردن یا تقویت سیگنال و کنترل جریان بار استفاده می‌شود."
+                    purpose = "Used to switch or amplify signals and control load current."
                 elif "led" in lowered_name:
-                    purpose = "تبدیل انرژی الکتریکی به نور؛ معمولاً نشانگر یا منبع روشنایی است."
+                    purpose = "Converts electrical energy into light; commonly used as an indicator or light source."
                 elif "potentiometer" in lowered_name or "variable resistor" in lowered_name:
-                    purpose = "مقاومت قابل تنظیم برای تغییر ولتاژ یا سطح سیگنال."
+                    purpose = "An adjustable resistance used to change voltage or signal level."
                 elif "crystal" in lowered_name or "oscillator" in lowered_name:
-                    purpose = "تولید مرجع فرکانسی برای ساعت و زمان‌بندی مدار."
+                    purpose = "Provides a frequency reference for circuit clocks and timing."
                 elif "cable" in lowered_name or "wire" in lowered_name:
-                    purpose = "اتصال الکتریکی برای عبور تغذیه یا سیگنال بین بخش‌های مدار."
+                    purpose = "Provides an electrical connection for power or signals between circuit sections."
                 elif "ic" in lowered_name or "integrated circuit" in lowered_name:
-                    purpose = "مدار مجتمع؛ بسته به نوعش عملیات منطق، کنترل، تقویت یا پردازش را انجام می‌دهد."
+                    purpose = "An integrated circuit; its function depends on the part and may include logic, control, amplification, or processing."
                 else:
-                    purpose = "مدل فقط برچسب تصویری را پیشنهاد می‌دهد؛ برای تعیین نقش دقیق، شماره قطعه و مدار باید بررسی شود."
-                st.caption(f"کاربرد رایج: {purpose}")
+                    purpose = "The model suggests a visual label only. Check the part number and circuit to identify its exact function."
+                st.caption(f"Typical use: {purpose}")
             if len(saved_detection["records"]) > 12:
-                st.caption(f"برای جلوگیری از شلوغی صفحه، توضیح {len(saved_detection['records']) - 12} تشخیص دیگر مخفی مانده است.")
+                st.caption(f"To keep the page readable, descriptions for {len(saved_detection['records']) - 12} additional detections are hidden.")
         else:
             st.info(
                 "The detector did not return any components above this confidence threshold. "
@@ -772,8 +772,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         st.image(roi, caption="Selected resistor crop", width="stretch")
     st.caption(f"Crop size: {roi.shape[1]} × {roi.shape[0]} pixels.")
     st.caption(
-        "برای نتیجه بهتر: فقط یک مقاومت را در کادر بگیر، نوارها واضح و عمودی باشند، "
-        "بازتاب مستقیم فلاش روی بدنه نباشد و خود مقاومت تا حد امکان افقی باشد."
+        "For best results, crop a single resistor and make sure the color bands are clear and vertical. "
+        "Avoid direct flash glare on the body and keep the resistor horizontal."
     )
 
     st.subheader("2. Configure Band Reading")
@@ -872,8 +872,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         if mode == "Automatic color detection (experimental)" and len(suggested_bands) == int(band_count):
             st.markdown("**Review or correct the detected colors**")
             st.caption(
-                "تشخیص رنگ با نور و دوربین تغییر می‌کند. رنگ هر نوار را بررسی کن؛ "
-                "مقدار اهم و فرمول پایین با همین انتخاب‌ها دوباره محاسبه می‌شود."
+                "Lighting and camera white balance can affect color recognition. Review each band color; "
+                "the resistance value and formula below will be recalculated using your selections."
             )
             correction_hash = hashlib.sha256(signature_text.encode("utf-8")).hexdigest()[:10]
             correction_columns = st.columns(int(band_count))
@@ -898,7 +898,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             corrected = display_bands != suggested_bands
         elif current_result.get("error"):
             st.caption(
-                "برای تشخیص ناقص، از Manual color selection استفاده کن و رنگ هر نوار را انتخاب کن."
+                "If automatic detection is incomplete, switch to Manual color selection and choose each band color."
             )
 
         annotated = current_result.get("annotated", roi)
@@ -924,42 +924,42 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 st.write("**Band sequence:**")
                 st.write(" → ".join(display_bands))
                 band_rows = []
-                digit_roles = ["رقم معنادار اول", "رقم معنادار دوم", "رقم معنادار سوم"]
+                digit_roles = ["First significant digit", "Second significant digit", "Third significant digit"]
                 for index, color in enumerate(display_bands):
                     if index < int(band_count) - 2:
                         code = DIGIT_VALUES.get(color)
                         role = digit_roles[index]
                         meaning = (
-                            f"رقم {code} وارد عدد اصلی مقاومت می‌شود."
+                            f"Digit {code} is part of the significant resistance value."
                             if code is not None
-                            else "این رنگ برای نوار رقم معتبر نیست؛ رنگ را اصلاح کن."
+                            else "This color is not valid for a significant-digit band. Correct the selection."
                         )
-                        encoded = str(code) if code is not None else "نامعتبر"
+                        encoded = str(code) if code is not None else "Invalid"
                     elif index == int(band_count) - 2:
                         multiplier = MULTIPLIER_OHMS.get(color)
-                        role = "ضریب / Multiplier"
+                        role = "Multiplier"
                         encoded = f"×{multiplier:g}" if multiplier is not None else "نامعتبر"
-                        meaning = f"عدد قبلی در {multiplier:g} ضرب می‌شود." if multiplier is not None else "رنگ ضریب معتبر نیست."
+                        meaning = f"Multiply the previous digits by {multiplier:g}." if multiplier is not None else "This is not a valid multiplier color."
                     else:
                         tolerance = TOLERANCE_PERCENT.get(color)
-                        role = "تلرانس / Tolerance"
+                        role = "Tolerance"
                         encoded = f"±{tolerance:g}%" if tolerance is not None else "نامعتبر"
                         meaning = (
-                            f"مقدار واقعی معمولاً تا {tolerance:g}% با مقدار اسمی اختلاف دارد."
+                            f"The actual resistance may differ from the nominal value by up to {tolerance:g}%."
                             if tolerance is not None
-                            else "رنگ تلرانس معتبر نیست."
+                            else "This is not a valid tolerance color."
                         )
                     band_rows.append({
-                        "نوار": index + 1,
-                        "رنگ": color,
-                        "کد": encoded,
-                        "نقش": role,
-                        "توضیح": meaning,
+                        "Band": index + 1,
+                        "Color": color,
+                        "Code": encoded,
+                        "Role": role,
+                        "Explanation": meaning,
                     })
                 st.dataframe(band_rows, width="stretch", hide_index=True)
 
             if corrected:
-                st.info("از رنگ‌هایی که اصلاح کردی برای محاسبهٔ نتیجه استفاده شد.")
+                st.info("The corrected band colors were used to calculate the result.")
             if current_result.get("error"):
                 st.warning(current_result["error"])
 
@@ -968,7 +968,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 try:
                     decoded = decode_band_sequence(display_bands, int(band_count))
                 except ValueError as error:
-                    st.warning(f"رنگ‌های انتخاب‌شده کد معتبری نمی‌سازند: {error}")
+                    st.warning(f"The selected colors do not form a valid resistor code: {error}")
 
             if decoded:
                 st.metric("Estimated resistance", format_resistance(decoded["ohms"]))
@@ -980,15 +980,15 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     f"{decoded['digits']} × {decoded['multiplier']:g} Ω "
                     f"= {format_resistance(decoded['ohms'])}"
                 )
-                st.markdown(f"**نحوهٔ محاسبه:** {formula}")
+                st.markdown(f"**Calculation:** {formula}")
                 st.caption(
-                    "کاربرد مقاومت: محدود کردن جریان (مثلاً برای محافظت از LED)، تقسیم ولتاژ، "
-                    "و تنظیم بایاس مدار. این مقدار از روی کد رنگ تخمین زده شده، نه اندازه‌گیری مستقیم؛ "
-                    "برای مدار حساس با مولتی‌متر بررسی کن."
+                    "Common resistor uses include limiting current (for example, to protect an LED), dividing voltage, "
+                    "and setting circuit bias. This value is estimated from the color code, not measured directly. "
+                    "Verify important values with a multimeter."
                 )
                 st.caption(
-                    f"تلرانس یعنی مقدار واقعی معمولاً در بازهٔ {low} تا {high} قرار می‌گیرد، "
-                    "با فرض سالم بودن قطعه و درست خواندن رنگ‌ها."
+                    f"Tolerance is the allowed variation around the nominal value; the expected range is {low} to {high}, "
+                    "assuming the component is undamaged and the bands are read correctly."
                 )
 
     st.divider()
