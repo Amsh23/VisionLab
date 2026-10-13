@@ -110,7 +110,7 @@ def classify_hsv_pixels(hsv: np.ndarray) -> np.ndarray:
     labels[neutral & (value >= 145) & (value < 210)] = "Silver"
     labels[neutral & (value >= 210)] = "White"
 
-    active = saturation >= 42
+    active = (saturation >= 42) & (value >= 42)
     labels[active & ((hue <= 7) | (hue >= 172)) & (value >= 45)] = "Red"
     labels[active & (hue >= 8) & (hue <= 20) & (value < 135)] = "Brown"
     labels[active & (hue >= 8) & (hue <= 20) & (value >= 135)] = "Orange"
