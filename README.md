@@ -86,7 +86,14 @@ $env:ROBOFLOW_API_KEY="your_roboflow_api_key"
 python scripts/download_roboflow_dataset.py --dataset resistor-segmentation
 ```
 
-That export contains semantic masks, not ordinary bounding boxes. Inspect the masks and class mapping before selecting a compatible segmentation training pipeline; do not feed it to the ordinary object detector by default.
+That export contains semantic masks, not ordinary bounding boxes. Convert the masks to YOLO segmentation polygons and train a segmentation checkpoint (not the default detection checkpoint):
+
+```powershell
+python scripts/prepare_resistor_segmentation_yolo.py --input data/resistor_value_segmentation --output data/resistor_seg_yolo --background-value 0
+python scripts/train_components_yolo.py --data data/resistor_seg_yolo/data.yaml --model yolo11n-seg.pt --epochs 80 --imgsz 640 --batch 4 --name resistor_bands --weights-out models/resistor_seg.pt
+```
+
+Inspect sample labels before training and verify the mask background value. The converter approximates semantic masks as polygons and training accuracy must be evaluated on independent real photos. In the resistor reader, choose **Local YOLO segmentation model** and set `models/resistor_seg.pt` to use the trained band-color classes.
 
 **Download the Kaggle resistor segmentation dataset**
 ```powershell
@@ -107,6 +114,7 @@ After training, open **Electronic Component Analyzer → Detection backend → L
 - `DATASETS.md`: public component and IoT-board datasets, licensing notes, and end-to-end training commands.
 - `scripts/download_component_dataset.py`: download the larger general-components dataset from Roboflow.
 - `scripts/download_roboflow_dataset.py`: download the supplied Roboflow IoT or resistor-segmentation datasets.
+- `scripts/prepare_resistor_segmentation_yolo.py`: convert the Roboflow semantic masks to YOLO segmentation polygons.
 - `scripts/download_kaggle_resistor_dataset.py`: download and inventory the Kaggle resistor-segmentation archive.
 - `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
 - `scripts/prepare_iotkits_yolo.py`: convert supported IoTKITs JSON/polygon annotations to YOLO format.
