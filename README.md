@@ -56,7 +56,7 @@ No API key is committed to this repository.
 
 ### Local detector and custom training
 
-Training is optional and should be done on a PC, not in the Streamlit Cloud app environment. Use a dedicated training environment because Ultralytics installs `opencv-python`, while the deployed app uses `opencv-python-headless`.
+Training is optional and should be done on a PC, not in the Streamlit Cloud app environment. Use the dedicated local environment from `requirements-training.txt`; it includes Streamlit, Ultralytics, Roboflow, and the non-headless OpenCV package so the same environment can train and run local YOLO weights.
 
 **Windows PowerShell**
 ```powershell
