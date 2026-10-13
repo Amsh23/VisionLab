@@ -48,7 +48,7 @@ The existing synthetic resistor pictures are for code/tests only. They are not a
 
 ## Training setup (recommended on a PC, not Streamlit Cloud)
 
-Create a dedicated training environment. This avoids installing the opencv-python package used by Ultralytics into the same environment as the Streamlit app, which uses opencv-python-headless.
+Create a dedicated local environment for training and testing the local YOLO weights. This environment uses opencv-python rather than the headless OpenCV wheel in the Streamlit Cloud requirements, and it includes Streamlit so you can run the analyzer locally with the trained model.
 
 ### Windows PowerShell
 
