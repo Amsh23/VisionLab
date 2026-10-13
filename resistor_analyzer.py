@@ -589,6 +589,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     )
                     response.raise_for_status()
                     prediction_payload = response.json()
+                    if not isinstance(prediction_payload, dict):
+                        raise ValueError("The inference response must be a JSON object.")
                     predictions = prediction_payload.get("predictions", [])
                     if not isinstance(predictions, list):
                         raise ValueError("The inference response did not contain a predictions list.")
