@@ -1,0 +1,20 @@
+{
+  "timestamp_utc": "2026-10-13T15:22:50.547389+00:00",
+  "models": [
+    {
+      "file": "models/components.pt",
+      "dataset": "LibreYOLO Circuit Elements",
+      "task": "electronics component detection"
+    },
+    {
+      "file": "models/resistor_band_classifier.joblib",
+      "dataset": "Augmented synthetic color-band patches",
+      "task": "12-class resistor-band patch color classification",
+      "warning": "Synthetic-only metrics are not estimates of accuracy on real resistor photographs."
+    }
+  ],
+  "warnings": [
+    "IoTKITs download or annotation conversion: RuntimeError",
+    "Real-photo resistor-band segmentation was skipped because the GitHub Actions ROBOFLOW_API_KEY secret is not configured."
+  ]
+}
