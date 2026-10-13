@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 
 # endregion
@@ -20,6 +21,12 @@ def main() -> None:
     parser.add_argument("--device", default=None, help="Optional device, e.g. cpu, 0, or 0,1")
     parser.add_argument("--project", default="runs/component_detection")
     parser.add_argument("--name", default="electronics_components")
+    parser.add_argument(
+        "--weights-out",
+        type=Path,
+        default=Path("models/components.pt"),
+        help="Optional destination for the trained best.pt weights. Set to models/iot_boards.pt for the IoTKITs dataset.",
+    )
     args = parser.parse_args()
 
     if args.epochs < 1 or args.imgsz < 32 or args.batch < 1:
@@ -64,7 +71,12 @@ def main() -> None:
 
     print(f"Training finished. Expected best weights: {best_weights}")
     if best_weights.is_file():
-        print("Copy best.pt to models/components.pt to use it with the local detector.")
+        destination = args.weights_out.expanduser().resolve()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if best_weights.resolve() != destination:
+            shutil.copy2(best_weights, destination)
+        print(f"Best weights copied to: {destination}")
+        print("Select this weights path in Electronic Component Analyzer -> Local YOLO weights.")
     else:
         print("Training returned, but best.pt was not found at the expected path. Check the training log.")
 
