@@ -8,17 +8,46 @@ VisionLab uses two different computer-vision tasks, so train and evaluate separa
 
 ## Recommended datasets
 
-### 1. Electronics Components (primary component detector)
+### 1. Electronics Components (general loose-part detector)
 
 - **Source:** [Roboflow Universe — Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck)
 - **Reported size:** approximately 8,248 images.
-- **Labels:** 10 component classes, including resistor, capacitor, diode, inductor, transistor, connection cable, crystal oscillator, IC, LED, and potentiometer.
+- **Labels:** 10 component classes, including resistor, capacitor, diode, inductor, transistor, cable, crystal oscillator, IC, LED, and potentiometer.
 - **License shown on the source page:** CC BY 4.0.
-- **Download:** requires a Roboflow account/API key, then exports YOLOv8 labels and a data.yaml file.
+- **Download:** `scripts/download_component_dataset.py`; exports YOLO labels and a `data.yaml` file.
 
-The current downloader is **scripts/download_component_dataset.py**. Keep your API key in an environment variable; never commit it to GitHub.
+### 2. IoT_Dataset (your supplied Roboflow source)
 
-### 2. IoTKITs (IoT boards and educational kits)
+- **Source:** [Design Project — IoT_Dataset](https://universe.roboflow.com/design-project-zeico/iot_dataset)
+- **Reported size:** 209 images across seven classes: Arduino, Capacitor, IoT-Devices, Jumper Wires, Resistor, Transistor, and Ultrasonic Sensor.
+- **License shown on the source page:** MIT.
+- **Dataset version:** the project page displays two versions; the downloader preset selects version 2. Verify the class mapping and image count after export.
+- **Download:** `scripts/download_roboflow_dataset.py --dataset iot`, format `yolov8`.
+
+This is a useful starting point, but 209 images is small. Evaluate with independent photos from your own workbench. Do not merge this dataset blindly with the larger general-components dataset: overlapping classes such as `IoT-Devices` and specific board labels need a consistent unified label map.
+
+### 3. Resistor Value Determination (your supplied Roboflow source)
+
+- **Source:** [Resistor Color Code — Resistor Value Determination](https://universe.roboflow.com/resistor-color-code/resistor-value-determination)
+- **Task:** semantic segmentation.
+- **License shown on the source page:** CC BY 4.0.
+- **Labels shown:** Orange, Red, Green, Yellow, Blue, Gold, Black, Brown, Violet, and several resistor-value labels.
+- **Version:** the source model card references `resistor-value-determination/6` with 655 images, while the overview count displays 296 images. Verify the count in the exported version.
+- **Model quality warning:** the public page reports mIoU of 5.9% for the listed model. Treat the annotations as a candidate training source; do not treat that pretrained model's predictions as ground truth.
+- **Download:** `scripts/download_roboflow_dataset.py --dataset resistor-segmentation`, format `png-mask-semantic`.
+
+This is semantic-mask data, not an ordinary bounding-box dataset. Keep every image paired with its exact mask; inspect `_classes.csv` and mask pixel IDs. Do not run the default `yolo11n.pt` detector training command on this export. Choose a compatible segmentation pipeline and validate it independently. Semantic segmentation may locate/color-label pixels without decoding the entire resistor value.
+
+### 4. Resistor Images Dataset for Segmentation (your supplied Kaggle source)
+
+- **Source:** [Kaggle — Resistor Images Dataset for Segmentation](https://www.kaggle.com/datasets/alptugaydin/resistor-images-dataset-for-segmentation)
+- **Task:** resistor-image segmentation, according to the dataset title.
+- **License:** check the current Kaggle page and included metadata before redistributing images or trained derivatives. This guide does not assume a license because the page metadata could not be verified here.
+- **Download:** `scripts/download_kaggle_resistor_dataset.py`. Configure Kaggle API access first. The script lists image-like files and potential annotation files after extraction.
+
+The archive's exact annotation structure must be inspected after download. A folder of images alone is not a segmentation dataset; each image must have a matching verified mask or annotation.
+
+### 5. IoTKITs (IoT boards and educational kits)
 
 - **Source:** [Mendeley Data — IoTKITs](https://data.mendeley.com/datasets/x5thzmkxhy/1)
 - **Reported size:** 3,200 annotated images across 32 kit/board classes.
@@ -27,16 +56,16 @@ The current downloader is **scripts/download_component_dataset.py**. Keep your A
 - **License shown on the source page:** CC BY 4.0.
 - **Citation:** Nguyen, T.-T.; Nguyen Do, A.-T.; Vu, D.-L. (2025). *IoTKITs: A novel dataset for IoT education kit recognition*. Data in Brief, 60, 111650. https://doi.org/10.1016/j.dib.2025.111650
 
-Download with **scripts/download_iotkits_dataset.py**. Then convert the supported per-image Roboflow/LabelMe or COCO JSON annotations with **scripts/prepare_iotkits_yolo.py**. The converter writes a YOLO-format directory and a data.yaml file.
+Download with `scripts/download_iotkits_dataset.py`. Then convert supported per-image Roboflow/LabelMe or COCO JSON annotations with `scripts/prepare_iotkits_yolo.py`.
 
-**Important:** if the converter reports that the annotation structure is unsupported, do not train on unlabeled images. Import the original dataset into Roboflow, verify its labels, export as YOLOv8, and point the training script at the exported data.yaml.
+**Important:** if the annotation converter reports an unsupported structure, do not train on unlabeled images. Import the original dataset into Roboflow, verify its labels, export in a compatible format, and use that exported configuration file.
 
-### 3. PCB Component Detection (optional secondary source)
+### 6. PCB Component Detection (optional secondary source)
 
 - **Source:** [wangshnegqi/pcb-component-detection-dataset-yolo](https://github.com/wangshnegqi/pcb-component-detection-dataset-yolo)
 - **Labels:** resistor, capacitor, diode, LED, IC, connector, switch/button, header, crystal, and debug/test point.
 - **License stated by the repository:** dataset images and annotations CC BY 4.0; supplied weights and repository code/docs Apache 2.0.
-- **Usage:** clone or download the repository, review its license files, and try its dataset/data.yaml with the training script.
+- **Usage:** clone or download the repository, review its license files, and try its dataset configuration with the training script.
 
 This dataset focuses on populated PCBs, so it may not generalize to loose components on a desk or to development boards. Evaluate each task on separate real photos.
 
@@ -70,22 +99,51 @@ python scripts/download_component_dataset.py
 python scripts/train_components_yolo.py --data data/component_dataset/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --weights-out models/components.pt
 ~~~
 
-### Train a separate IoT-board detector
+### Train a detector using the supplied Roboflow IoT_Dataset
 
 ~~~powershell
-python scripts/download_iotkits_dataset.py
-python scripts/prepare_iotkits_yolo.py
-python scripts/train_components_yolo.py --data data/iotkits_yolo/data.yaml --model yolo11n.pt --epochs 60 --imgsz 640 --batch 8 --name iot_boards --weights-out models/iot_boards.pt
+$env:ROBOFLOW_API_KEY="YOUR_ROBOFLOW_API_KEY"
+python scripts/download_roboflow_dataset.py --dataset iot
+python scripts/train_components_yolo.py --data data/iot_roboflow/data.yaml --model yolo11n.pt --epochs 100 --imgsz 640 --batch 8 --name iot_parts --weights-out models/iot_components.pt
 ~~~
 
-If training memory is limited, reduce --batch to 4 or 2. A GPU is recommended; CPU training is slower. Training will download the initial YOLO checkpoint if it is not cached.
+This source has only 209 images, so 100 epochs is a starting experiment, not a promise of good accuracy. Review validation metrics and test on photos that were not in the dataset.
+
+### Download the supplied resistor semantic-segmentation dataset
+
+~~~powershell
+$env:ROBOFLOW_API_KEY="YOUR_ROBOFLOW_API_KEY"
+python scripts/download_roboflow_dataset.py --dataset resistor-segmentation
+~~~
+
+This export contains semantic masks. Inspect the folder layout, class mapping, and pixel IDs first. Do not train it as ordinary object detection. Use a segmentation architecture and loader compatible with these masks.
+
+### Download the supplied Kaggle resistor dataset
+
+~~~powershell
+python scripts/download_kaggle_resistor_dataset.py
+~~~
+
+Configure Kaggle API access as described below, then inspect the printed annotation file list and check the dataset's license. The download script does not guess which files are masks.
+
+### Configure Kaggle downloads
+
+1. Sign in to Kaggle and open your account's **Settings → API** section.
+2. Create/download your Kaggle API token using Kaggle's current instructions.
+3. Configure the token using Kaggle's documented method for your operating system. Never commit `kaggle.json` or an API token to GitHub.
+4. Run `python scripts/download_kaggle_resistor_dataset.py`.
+
+If you use a Kaggle credentials file, store it in Kaggle's expected user configuration directory and restrict access to it.
+
+If training memory is limited, reduce `--batch` to `4` or `2`. A GPU is recommended; CPU training is slower.
 
 ## Use your trained model
 
 Run VisionLab from a machine where the weights file exists. In **Electronic Component Analyzer → Detection backend → Local YOLO weights**, set one of these paths:
 
 - **models/components.pt** for loose electronic components.
-- **models/iot_boards.pt** for IoT development boards and kits.
+- **models/iot_components.pt** for the supplied Roboflow IoT_Dataset labels.
+- **models/iot_boards.pt** for the separate IoTKITs board/kit labels.
 
 These are separate models and will return the class names they were trained with. Use a model with the task and image domain that match your input.
 
