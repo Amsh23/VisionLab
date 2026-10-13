@@ -13,6 +13,9 @@ venv/
 # Local datasets and generated samples
 data/component_dataset/
 data/generated_resistor_dataset/
+data/iotkits_raw/
+data/iotkits_yolo/
+data/pcb_component_dataset/
 
 # Training outputs and local model weights
 runs/
