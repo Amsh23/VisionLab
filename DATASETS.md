@@ -36,7 +36,16 @@ This is a useful starting point, but 209 images is small. Evaluate with independ
 - **Model quality warning:** the public page reports mIoU of 5.9% for the listed model. Treat the annotations as a candidate training source; do not treat that pretrained model's predictions as ground truth.
 - **Download:** `scripts/download_roboflow_dataset.py --dataset resistor-segmentation`, format `png-mask-semantic`.
 
-This is semantic-mask data, not an ordinary bounding-box dataset. Keep every image paired with its exact mask; inspect `_classes.csv` and mask pixel IDs. Do not run the default `yolo11n.pt` detector training command on this export. Choose a compatible segmentation pipeline and validate it independently. Semantic segmentation may locate/color-label pixels without decoding the entire resistor value.
+This is semantic-mask data, not an ordinary bounding-box dataset. Keep every image paired with its exact mask and inspect `_classes.csv` and mask pixel IDs.
+
+Convert the paired class masks into YOLO segmentation polygons, then fine-tune a segmentation checkpoint:
+
+~~~powershell
+python scripts/prepare_resistor_segmentation_yolo.py --input data/resistor_value_segmentation --output data/resistor_seg_yolo --background-value 0
+python scripts/train_components_yolo.py --data data/resistor_seg_yolo/data.yaml --model yolo11n-seg.pt --epochs 80 --imgsz 640 --batch 4 --name resistor_bands --weights-out models/resistor_seg.pt
+~~~
+
+Review the converter's sample counts, class names, and generated labels before training. It polygonizes each connected region of each mask class, so it approximates semantic masks as instance-segmentation polygons. If the mask convention uses a different background pixel value, change `--background-value`. Semantic segmentation may identify band colors without decoding the complete resistor value; evaluate the final model separately on real photos.
 
 ### 4. Resistor Images Dataset for Segmentation (your supplied Kaggle source)
 
@@ -144,6 +153,7 @@ Run VisionLab from a machine where the weights file exists. In **Electronic Comp
 - **models/components.pt** for loose electronic components.
 - **models/iot_components.pt** for the supplied Roboflow IoT_Dataset labels.
 - **models/iot_boards.pt** for the separate IoTKITs board/kit labels.
+- **models/resistor_seg.pt** for a YOLO segmentation model trained on converted resistor masks; select it in the resistor reader's `Local YOLO segmentation model` method.
 
 These are separate models and will return the class names they were trained with. Use a model with the task and image domain that match your input.
 
