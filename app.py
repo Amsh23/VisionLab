@@ -229,6 +229,7 @@ PAGES = [
     "Feature Detection",
     "Image Matching",
     "Image Segmentation",
+    "Electronic Component Analyzer",
     "Object Detection (YOLO)",
     "Video Processing",
     "Machine Learning Demo",
@@ -1077,7 +1078,16 @@ elif page == "Image Segmentation":
 # endregion
 
 
-# region 13: Optional YOLO Object Detection
+# region 13: Electronic Component Analyzer
+elif page == "Electronic Component Analyzer":
+    from resistor_analyzer import render_resistor_analyzer
+
+    render_resistor_analyzer(image, image_token())
+
+# endregion
+
+
+# region 14: Optional YOLO Object Detection
 elif page == "Object Detection (YOLO)":
     section_intro(
         "Object Detection (YOLO)",
@@ -1122,7 +1132,7 @@ elif page == "Object Detection (YOLO)":
 # endregion
 
 
-# region 14: Video Processing
+# region 15: Video Processing
 elif page == "Video Processing":
     section_intro(
         "Video Processing",
@@ -1220,7 +1230,7 @@ elif page == "Video Processing":
 # endregion
 
 
-# region 15: Machine Learning Demo
+# region 16: Machine Learning Demo
 elif page == "Machine Learning Demo":
     section_intro(
         "Machine Learning Demo",
