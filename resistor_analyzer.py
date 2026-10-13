@@ -179,8 +179,16 @@ def classify_hsv_color(hsv_values: np.ndarray, baseline_value: float = 0.0) -> s
     return "Violet"
 
 
-def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dict], list[dict]]:
+def detect_band_runs(
+    roi_rgb: np.ndarray,
+    expected_count: int,
+    *,
+    use_trained_classifier: bool = False,
+) -> tuple[list[dict], list[dict]]:
     """Detect color bands from a resistor-body profile, not from band edges.
+
+    The synthetic-trained patch classifier is disabled by default because its
+    held-out score was measured on synthetic patches, not real camera photos.
 
     A narrow-band edge detector can mistake the two edges of one stripe for
     two separate bands and often misses gold/silver bands when their colors are
@@ -304,7 +312,7 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
         band_lab = np.median(profile_lab[core_start:core_end], axis=0)
         band_color = classify_hsv_color(band_hsv, baseline_value=body_value)
         classifier_confidence = None
-        if predict_band_color is not None:
+        if use_trained_classifier and predict_band_color is not None:
             try:
                 band_patch = scan_rgb[:, core_start:core_end, :]
                 model_prediction = predict_band_color(band_patch)
@@ -1017,27 +1025,36 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     model_root = Path(__file__).resolve().parent / "models"
     band_segmentation_path = model_root / "resistor_seg.pt"
     band_classifier_path = model_root / "resistor_band_classifier.joblib"
-    if band_classifier_path.is_file():
-        automatic_mode_label = "Automatic color detection (trained color classifier)"
-    else:
-        automatic_mode_label = "Automatic color detection (experimental)"
-    default_band_mode = (
-        "Local YOLO segmentation model"
-        if band_segmentation_path.is_file()
-        else automatic_mode_label
-    )
+    # The standard path uses the adaptive HSV/Lab heuristic. The trained patch
+    # classifier was evaluated only on synthetic color patches, so keep it opt-in.
+    automatic_mode_label = "Automatic color detection (HSV heuristic)"
+    experimental_classifier_label = "Experimental synthetic-trained color classifier"
+    default_band_mode = automatic_mode_label
 
-    mode_options = [
-        automatic_mode_label,
+    mode_options = [automatic_mode_label]
+    if band_classifier_path.is_file():
+        mode_options.append(experimental_classifier_label)
+    mode_options.extend([
         "Local YOLO segmentation model",
         "Manual color selection",
-    ]
+    ])
     mode = p2.selectbox(
         "Band reading method",
         mode_options,
         index=mode_options.index(default_band_mode),
         key=f"res_read_mode_{roi_key}",
     )
+    if mode == experimental_classifier_label:
+        st.warning(
+            "This classifier was trained and tested on synthetic color patches only. "
+            "Its 92.6% synthetic test accuracy is not real-photo accuracy. For physical "
+            "resistors, start with the HSV heuristic or correct the colors manually."
+        )
+    elif mode == automatic_mode_label:
+        st.caption(
+            "Default for real photos: adaptive HSV/Lab band detection. Lighting, glare, "
+            "cropping, and camera white balance may still require manual color correction."
+        )
     band_order = p3.selectbox("Read bands in this direction", ["Left to right", "Right to left"], key=f"res_band_order_{roi_key}")
 
     band_model_path = "models/resistor_seg.pt"
@@ -1139,7 +1156,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 else:
                     result["decoded"] = decode_band_sequence(result["bands"], int(band_count))
             else:
-                runs, all_runs = detect_band_runs(roi, int(band_count))
+                runs, all_runs = detect_band_runs(
+                    roi,
+                    int(band_count),
+                    use_trained_classifier=(mode == experimental_classifier_label),
+                )
                 physical_runs = sorted(runs, key=lambda run: run["center"])
                 read_runs = physical_runs if band_order == "Left to right" else list(reversed(physical_runs))
                 result["runs"] = physical_runs
@@ -1179,7 +1200,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         display_bands = suggested_bands.copy()
         corrected = False
 
-        if mode in (automatic_mode_label, "Local YOLO segmentation model") and len(suggested_bands) == int(band_count):
+        if mode in (automatic_mode_label, experimental_classifier_label, "Local YOLO segmentation model") and len(suggested_bands) == int(band_count):
             st.markdown("**Review or correct the detected colors**")
             st.caption(
                 "Predicted band colors can still be wrong because of lighting, image quality, or model limitations. "
@@ -1212,7 +1233,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             )
 
         annotated = current_result.get("annotated", roi)
-        if mode in (automatic_mode_label, "Local YOLO segmentation model") and len(display_bands) == int(band_count):
+        if mode in (automatic_mode_label, experimental_classifier_label, "Local YOLO segmentation model") and len(display_bands) == int(band_count):
             physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
             if len(physical_runs) == int(band_count):
                 physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
