@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+.env.*
+
+# Streamlit secrets: never commit API keys
+.streamlit/secrets.toml
+
+# Local datasets and generated samples
+data/component_dataset/
+data/generated_resistor_dataset/
+
+# Training outputs and local model weights
+runs/
+models/*.pt
