@@ -380,12 +380,15 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                         "Component": class_name,
                         "Confidence": round(confidence, 3),
                         "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
+                        "_box": [bx1, by1, bx2, by2],
                     })
 
                 st.session_state[result_key] = {
                     "signature": repr(signature),
+                    "source_token": selected_token,
                     "image": annotated,
                     "records": records,
+                    "boxes": records,
                     "model": model_id,
                     "error": None,
                 }
@@ -452,11 +455,14 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             "Component": class_name,
                             "Confidence": round(confidence, 3),
                             "Bounding box (x1, y1, x2, y2)": ", ".join(map(str, coords)),
+                            "_box": coords,
                         })
                 st.session_state[result_key] = {
                     "signature": repr(signature),
+                    "source_token": selected_token,
                     "image": annotated,
                     "records": records,
+                    "boxes": records,
                     "model": str(model_path),
                     "error": None,
                 }
@@ -469,7 +475,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         st.image(saved_detection["image"], width="stretch")
         st.metric("Components detected", len(saved_detection["records"]))
         if saved_detection["records"]:
-            st.dataframe(saved_detection["records"], width="stretch", hide_index=True)
+            visible_records = [
+                {key: value for key, value in row.items() if not key.startswith("_")}
+                for row in saved_detection["records"]
+            ]
+            st.dataframe(visible_records, width="stretch", hide_index=True)
         else:
             st.info(
                 "The detector did not return any components above this confidence threshold. "
@@ -504,15 +514,41 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     st.divider()
     st.subheader("2. Select the Resistor Region")
     st.caption("Left and top coordinates are inclusive. Right and bottom coordinates are exclusive.")
-    roi_key = str(source_token or "image")
+    current_scene = st.session_state.get("components_full_scene_result", {})
+    scene_boxes = (
+        current_scene.get("boxes", [])
+        if current_scene.get("source_token") == selected_token
+        else []
+    )
+    resistor_box_indices = [
+        index for index, item in enumerate(scene_boxes)
+        if "resistor" in str(item.get("Component", "")).lower()
+        or "resister" in str(item.get("Component", "")).lower()
+    ]
+    crop_choices = ["Manual crop coordinates"] + [
+        f"Detected resistor #{number} ({scene_boxes[index]['Component']}, {scene_boxes[index]['Confidence']:.0%})"
+        for number, index in enumerate(resistor_box_indices, start=1)
+    ]
+    crop_choice = st.selectbox(
+        "Crop source",
+        crop_choices,
+        key=f"res_crop_source_{selected_token}",
+    )
+    default_box = [0, 0, image_width, image_height]
+    if crop_choice != "Manual crop coordinates":
+        selected_box_position = crop_choices.index(crop_choice) - 1
+        selected_box_index = resistor_box_indices[selected_box_position]
+        default_box = scene_boxes[selected_box_index]["_box"]
+
+    roi_key = f"{selected_token}_{crop_choice.replace(' ', '_').replace('#', '')}"
     step_x = max(1, image_width // 100)
     step_y = max(1, image_height // 100)
 
     c1, c2, c3, c4 = st.columns(4)
-    x1 = c1.number_input("Left (X1)", 0, image_width - 1, 0, step=step_x, key=f"res_roi_x1_{roi_key}")
-    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, 0, step=step_y, key=f"res_roi_y1_{roi_key}")
-    x2 = c3.number_input("Right (X2)", 1, image_width, image_width, step=step_x, key=f"res_roi_x2_{roi_key}")
-    y2 = c4.number_input("Bottom (Y2)", 1, image_height, image_height, step=step_y, key=f"res_roi_y2_{roi_key}")
+    x1 = c1.number_input("Left (X1)", 0, image_width - 1, int(default_box[0]), step=step_x, key=f"res_roi_x1_{roi_key}")
+    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, int(default_box[1]), step=step_y, key=f"res_roi_y1_{roi_key}")
+    x2 = c3.number_input("Right (X2)", 1, image_width, int(default_box[2]), step=step_x, key=f"res_roi_x2_{roi_key}")
+    y2 = c4.number_input("Bottom (Y2)", 1, image_height, int(default_box[3]), step=step_y, key=f"res_roi_y2_{roi_key}")
 
     if int(x2) <= int(x1) or int(y2) <= int(y1):
         st.error("Right must be greater than left, and bottom must be greater than top.")
@@ -576,7 +612,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     )
 
     signature = (
-        str(selected_token), int(x1), int(y1), int(x2), int(y2), transform,
+        str(selected_token), crop_choice, int(x1), int(y1), int(x2), int(y2), transform,
         int(band_count), mode, band_order, tuple(manual_bands),
     )
     signature_text = repr(signature)
