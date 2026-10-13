@@ -61,7 +61,7 @@ class DetectionResponseTests(unittest.TestCase):
             })
 
     def test_error_payload_is_not_silently_reported_as_no_detections(self):
-        with self.assertRaises(HostedInferenceResponseError):
+        with self.assertRaisesRegex(HostedInferenceResponseError, "model unavailable"):
             normalize_detection_predictions({"error": "model unavailable"})
 
     def test_unknown_payload_reports_available_keys(self):
@@ -73,6 +73,7 @@ class DetectionResponseTests(unittest.TestCase):
             ("request failed api_key=secret123", "secret123"),
             ("request failed https://service.invalid/?api_key=secret123", "secret123"),
             ("request failed with token secret+/123", "secret+/123"),
+            ("request failed https://service.invalid/?api_key=secret%2B%2F123", "secret+/123"),
         ]
         for message, api_key in cases:
             with self.subTest(message=message):

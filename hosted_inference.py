@@ -155,8 +155,11 @@ def normalize_detection_predictions(payload: Any) -> list[dict]:
     """
     if isinstance(payload, dict):
         if payload.get("error"):
+            detail = " ".join(str(payload["error"]).split())
+            if len(detail) > 180:
+                detail = detail[:177] + "..."
             raise HostedInferenceResponseError(
-                "The inference service returned an error payload."
+                f"The inference service returned an error: {detail or 'unspecified service error'}"
             )
 
         if "predictions" in payload:
