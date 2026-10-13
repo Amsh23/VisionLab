@@ -13,6 +13,12 @@ import requests
 import numpy as np
 import streamlit as st
 from PIL import Image
+
+try:
+    from resistor_band_classifier import predict_band_color, load_trained_band_classifier
+except Exception:
+    predict_band_color = None
+    load_trained_band_classifier = None
 # endregion
 
 
@@ -296,6 +302,16 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
         band_hsv = np.median(profile_hsv[core_start:core_end], axis=0)
         band_lab = np.median(profile_lab[core_start:core_end], axis=0)
         band_color = classify_hsv_color(band_hsv, baseline_value=body_value)
+        classifier_confidence = None
+        if predict_band_color is not None:
+            try:
+                band_patch = scan_rgb[:, core_start:core_end, :]
+                model_prediction = predict_band_color(band_patch)
+                if model_prediction is not None:
+                    band_color, classifier_confidence = model_prediction
+            except Exception:
+                # Keep the HSV estimate as a fallback if the optional checkpoint is unavailable.
+                classifier_confidence = None
         distance = float(np.linalg.norm(band_lab - body_lab))
         if distance < 9.0:
             continue
@@ -310,6 +326,7 @@ def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dic
                 "width": run_width,
                 "contrast": distance,
                 "score": score,
+                "classifier_confidence": classifier_confidence,
             }
         )
 
@@ -325,6 +342,18 @@ YOLO_BAND_COLOR_ALIASES = {
     "broan": "Brown",
     "grey": "Gray",
     "purple": "Violet",
+    "side-gold": "Gold",
+    "side-silver": "Silver",
+    "bk": "Black",
+    "br": "Brown",
+    "rd": "Red",
+    "og": "Orange",
+    "ye": "Yellow",
+    "gr": "Green",
+    "bu": "Blue",
+    "vt": "Violet",
+    "gy": "Gray",
+    "wh": "White",
 }
 
 
@@ -441,13 +470,20 @@ def get_reference_rows() -> list[dict]:
 
 
 # region 04: Streamlit Resistor Analyzer
+@st.cache_resource(show_spinner=False)
+def load_local_yolo_model(model_path: str):
+    """Load a local model checkpoint once per Streamlit worker."""
+    from ultralytics import YOLO
+    return YOLO(model_path)
+
+
 def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "image") -> None:
     """Render the resistor color-code reader inside VisionLab."""
     st.header("Electronic Component Analyzer")
     st.write(
         "Estimate the value of a single through-hole resistor from its color bands. "
-        "This first version uses classical OpenCV color analysis and a standards-based lookup table; "
-        "it does not pretend to be a trained object detector."
+        "A trained color classifier can refine candidate band colors, while OpenCV locates likely band positions "
+        "and the standards-based lookup table calculates resistance and tolerance."
     )
     st.info(
         "Use the shared uploader or capture a photo of your workbench with your webcam. "
@@ -506,8 +542,23 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         key="components_detector_confidence",
     )
 
-    # Hosted inference uses the key already configured in Streamlit Community Cloud.
-    # Never ask users to paste secrets into the app UI or print the key in error messages.
+    # Local checkpoints are populated by the repository's training workflow.
+    model_root = Path(__file__).resolve().parent / "models"
+    candidate_local_models = [
+        {"path": model_root / "components.pt", "label": "Trained Electronics Model"},
+        {"path": model_root / "iot_components.pt", "label": "Trained IoT Model"},
+        {"path": model_root / "iot_boards.pt", "label": "Trained IoT Board Model"},
+    ]
+    available_local_models = [
+        item for item in candidate_local_models
+        if item["path"].is_file()
+    ]
+    local_model_signature = tuple(
+        (item["label"], item["path"].name, item["path"].stat().st_size, item["path"].stat().st_mtime_ns)
+        for item in available_local_models
+    )
+
+    # Hosted inference uses the pre-configured Streamlit secret; no key input is exposed.
     try:
         api_key = str(st.secrets["ROBOFLOW_API_KEY"]).strip()
     except Exception:
@@ -516,123 +567,181 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     hosted_models = [
         {
             "id": "electronics-components-sveck/7",
-            "label": "Electronics Components",
+            "label": "Hosted Electronics Components",
             "source": "https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck",
         },
         {
             "id": "iot_dataset/2",
-            "label": "IoT Components and Modules",
+            "label": "Hosted IoT Components",
             "source": "https://universe.roboflow.com/design-project-zeico/iot_dataset",
         },
     ]
 
     st.markdown(
-        "The analyzer checks both a general electronics model and an IoT-focused model. "
-        "Their predictions are combined into one annotated result."
+        "The analyzer automatically combines locally trained electronics/IoT models when available "
+        "with hosted Roboflow predictions when the configured secret is present."
     )
     st.caption(
-        "The selected image is sent to Roboflow hosted inference. Avoid uploading private or sensitive images."
-    )
-    st.markdown(
-        "Models: [Electronics Components](https://universe.roboflow.com/vishnupriyas-workspace/electronics-components-sveck/model/7) "
-        " · [IoT Dataset](https://universe.roboflow.com/design-project-zeico/iot_dataset)"
+        "Hosted inference sends the selected image to Roboflow. Local inference runs inside this app. "
+        "Avoid uploading private or sensitive images."
     )
 
     api_key_fingerprint = (
         hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:10] if api_key else "missing"
     )
-    model_ids = tuple(model["id"] for model in hosted_models)
+    model_ids = tuple(model["id"] for model in hosted_models) if api_key else ()
     signature = (
-        "hosted_ensemble",
+        "automatic_ensemble",
         selected_token,
         model_ids,
+        local_model_signature,
         float(confidence_threshold),
         api_key_fingerprint,
     )
     result_key = "components_full_scene_result"
+    local_runtime_available = importlib.util.find_spec("ultralytics") is not None
+    can_run_local = bool(available_local_models) and local_runtime_available
+    can_run_detection = bool(api_key) or can_run_local
 
-    if not api_key:
+    if not can_run_detection:
         st.error(
-            "ROBOFLOW_API_KEY is not configured in Streamlit secrets. "
-            "Add it under App settings → Secrets, then restart or rerun the app."
+            "No detector is ready yet. Add ROBOFLOW_API_KEY under Streamlit secrets, "
+            "or deploy a trained checkpoint in the models/ directory."
+        )
+    elif available_local_models and not local_runtime_available:
+        st.warning(
+            "Local model files were found, but Ultralytics is not installed. "
+            "Install the project dependencies again to enable local inference."
         )
 
     run_detection = st.button(
         "Detect Electronic and IoT Components",
         type="primary",
         key="components_run_hosted_detection",
-        disabled=not bool(api_key),
+        disabled=not can_run_detection,
         width="stretch",
     )
 
     if run_detection:
-        image_buffer = BytesIO()
-        Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
-        jpeg_bytes = image_buffer.getvalue()
-        image_h, image_w = image_rgb.shape[:2]
         candidates = []
         model_errors = []
+        image_h, image_w = image_rgb.shape[:2]
+        source_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
 
-        with st.spinner("Checking the image with the electronics and IoT models..."):
-            for model_config in hosted_models:
-                model_id = model_config["id"]
-                try:
-                    response = requests.post(
-                        f"https://detect.roboflow.com/{model_id}",
-                        params={
-                            "api_key": api_key,
-                            "confidence": max(10, int(round(float(confidence_threshold) * 100))),
-                            "overlap": 35,
-                        },
-                        files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
-                        timeout=60,
-                    )
-                    response.raise_for_status()
-                    prediction_payload = response.json()
-                    if not isinstance(prediction_payload, dict):
-                        raise ValueError("The inference response must be a JSON object.")
-                    predictions = prediction_payload.get("predictions", [])
-                    if not isinstance(predictions, list):
-                        raise ValueError("The inference response did not contain a predictions list.")
+        def add_prediction(class_name, confidence, coords, model_label):
+            try:
+                bx1, by1, bx2, by2 = [int(round(float(value))) for value in coords]
+                bx1 = max(0, min(image_w - 1, bx1))
+                by1 = max(0, min(image_h - 1, by1))
+                bx2 = max(bx1 + 1, min(image_w, bx2))
+                by2 = max(by1 + 1, min(image_h, by2))
+                if bx2 <= bx1 or by2 <= by1:
+                    return
+                score = float(confidence)
+                if score < float(confidence_threshold):
+                    return
+                candidates.append({
+                    "Component": str(class_name).strip() or "component",
+                    "Confidence": score,
+                    "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
+                    "_box": [bx1, by1, bx2, by2],
+                    "Model": model_label,
+                })
+            except (TypeError, ValueError, OverflowError):
+                return
 
-                    for prediction in predictions:
-                        try:
-                            class_name = str(
-                                prediction.get("class", prediction.get("class_name", "component"))
-                            ).strip() or "component"
-                            confidence = float(prediction.get("confidence", 0.0))
-                            if confidence < float(confidence_threshold):
-                                continue
-
-                            center_x = float(prediction.get("x", 0))
-                            center_y = float(prediction.get("y", 0))
-                            box_width = float(prediction.get("width", 0))
-                            box_height = float(prediction.get("height", 0))
-                            bx1 = max(0, min(image_w - 1, int(round(center_x - box_width / 2))))
-                            by1 = max(0, min(image_h - 1, int(round(center_y - box_height / 2))))
-                            bx2 = max(bx1 + 1, min(image_w, int(round(center_x + box_width / 2))))
-                            by2 = max(by1 + 1, min(image_h, int(round(center_y + box_height / 2))))
-                            if box_width <= 0 or box_height <= 0:
-                                continue
-
-                            candidates.append({
-                                "Component": class_name,
-                                "Confidence": confidence,
-                                "Bounding box (x1, y1, x2, y2)": f"{bx1}, {by1}, {bx2}, {by2}",
-                                "_box": [bx1, by1, bx2, by2],
-                                "Model": model_config["label"],
-                            })
-                        except (TypeError, ValueError, OverflowError):
+        with st.spinner("Running the available electronics and IoT detectors..."):
+            # Locally trained checkpoints are always attempted first.
+            if can_run_local:
+                for local_config in available_local_models:
+                    try:
+                        model = load_local_yolo_model(str(local_config["path"]))
+                        predictions = model.predict(
+                            source=source_bgr,
+                            conf=float(confidence_threshold),
+                            verbose=False,
+                        )
+                        if not predictions:
                             continue
-                except requests.RequestException as error:
-                    status_code = getattr(getattr(error, "response", None), "status_code", None)
-                    detail = f"HTTP {status_code}" if status_code else "network request failed"
-                    model_errors.append(f"{model_config['label']}: {detail}")
-                except (ValueError, TypeError):
-                    model_errors.append(f"{model_config['label']}: invalid inference response")
+                        prediction = predictions[0]
+                        boxes = prediction.boxes
+                        if boxes is None:
+                            continue
+                        for box in boxes:
+                            class_id = int(box.cls[0].item())
+                            names = prediction.names
+                            class_name = (
+                                names.get(class_id, class_id)
+                                if isinstance(names, dict)
+                                else names[class_id]
+                            )
+                            confidence = float(box.conf[0].item())
+                            coords = box.xyxy[0].detach().cpu().numpy().astype(float).tolist()
+                            add_prediction(class_name, confidence, coords, local_config["label"])
+                    except Exception as error:
+                        # Show a safe, useful failure reason without exposing secrets.
+                        model_errors.append(
+                            f"{local_config['label']}: {type(error).__name__}"
+                        )
 
-        # Merge duplicate predictions from the two models when the same class
-        # occupies almost the same region. Different classes are retained.
+            # Hosted calls are optional and only use the secret already configured in Streamlit.
+            if api_key:
+                image_buffer = BytesIO()
+                Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
+                jpeg_bytes = image_buffer.getvalue()
+                for model_config in hosted_models:
+                    try:
+                        response = requests.post(
+                            f"https://detect.roboflow.com/{model_config['id']}",
+                            params={
+                                "api_key": api_key,
+                                "confidence": max(10, int(round(float(confidence_threshold) * 100))),
+                                "overlap": 35,
+                            },
+                            files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
+                            timeout=60,
+                        )
+                        response.raise_for_status()
+                        prediction_payload = response.json()
+                        if not isinstance(prediction_payload, dict):
+                            raise ValueError("invalid JSON object")
+                        predictions = prediction_payload.get("predictions", [])
+                        if not isinstance(predictions, list):
+                            raise ValueError("invalid predictions list")
+                        for prediction in predictions:
+                            try:
+                                class_name = str(
+                                    prediction.get("class", prediction.get("class_name", "component"))
+                                ).strip() or "component"
+                                confidence = float(prediction.get("confidence", 0.0))
+                                center_x = float(prediction.get("x", 0))
+                                center_y = float(prediction.get("y", 0))
+                                box_width = float(prediction.get("width", 0))
+                                box_height = float(prediction.get("height", 0))
+                                if box_width <= 0 or box_height <= 0:
+                                    continue
+                                coords = [
+                                    center_x - box_width / 2,
+                                    center_y - box_height / 2,
+                                    center_x + box_width / 2,
+                                    center_y + box_height / 2,
+                                ]
+                                add_prediction(
+                                    class_name,
+                                    confidence,
+                                    coords,
+                                    model_config["label"],
+                                )
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                    except requests.RequestException as error:
+                        status_code = getattr(getattr(error, "response", None), "status_code", None)
+                        detail = f"HTTP {status_code}" if status_code else "network request failed"
+                        model_errors.append(f"{model_config['label']}: {detail}")
+                    except (ValueError, TypeError):
+                        model_errors.append(f"{model_config['label']}: invalid response")
+
+        # Merge duplicate predictions only when their class names and boxes overlap.
         def box_iou(first, second):
             ax1, ay1, ax2, ay2 = first
             bx1, by1, bx2, by2 = second
@@ -646,10 +755,14 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
         merged_records = []
         for candidate in sorted(candidates, key=lambda row: row["Confidence"], reverse=True):
-            normalized_class = candidate["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+            normalized_class = (
+                candidate["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+            )
             duplicate = False
             for kept in merged_records:
-                kept_class = kept["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+                kept_class = (
+                    kept["Component"].casefold().replace(" ", "").replace("-", "").replace("_", "")
+                )
                 if normalized_class == kept_class and box_iou(candidate["_box"], kept["_box"]) >= 0.55:
                     duplicate = True
                     break
@@ -676,7 +789,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "image": annotated,
             "records": merged_records,
             "boxes": merged_records,
-            "model": " + ".join(model_ids),
+            "model": " + ".join([item["label"] for item in available_local_models] + list(model_ids)),
             "warnings": model_errors,
             "error": None,
         }
@@ -855,13 +968,28 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     st.subheader("2. Configure Band Reading")
     p1, p2, p3 = st.columns(3)
     band_count = p1.selectbox("Resistor band count", [4, 5], index=0, format_func=lambda value: f"{value}-band resistor", key=f"res_band_count_{roi_key}")
+    model_root = Path(__file__).resolve().parent / "models"
+    band_segmentation_path = model_root / "resistor_seg.pt"
+    band_classifier_path = model_root / "resistor_band_classifier.joblib"
+    if band_segmentation_path.is_file():
+        automatic_mode_label = "Automatic color detection (trained segmentation model)"
+        default_band_mode = "Local YOLO segmentation model"
+    elif band_classifier_path.is_file():
+        automatic_mode_label = "Automatic color detection (trained color classifier)"
+        default_band_mode = automatic_mode_label
+    else:
+        automatic_mode_label = "Automatic color detection (experimental)"
+        default_band_mode = automatic_mode_label
+
+    mode_options = [
+        automatic_mode_label,
+        "Local YOLO segmentation model",
+        "Manual color selection",
+    ]
     mode = p2.selectbox(
         "Band reading method",
-        [
-            "Automatic color detection (experimental)",
-            "Local YOLO segmentation model",
-            "Manual color selection",
-        ],
+        mode_options,
+        index=mode_options.index(default_band_mode),
         key=f"res_read_mode_{roi_key}",
     )
     band_order = p3.selectbox("Read bands in this direction", ["Left to right", "Right to left"], key=f"res_band_order_{roi_key}")
@@ -885,8 +1013,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             key=f"res_band_model_confidence_{roi_key}",
         )
         st.caption(
-            "This mode requires a locally trained YOLO segmentation/detection model whose class names include resistor-band colors. "
-            "Download and prepare the semantic dataset using DATASETS.md before training."
+            "This mode uses locally trained band-color weights. The model is trained separately from the general component detector."
         )
 
     manual_bands: list[str] = []
@@ -1006,7 +1133,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         display_bands = suggested_bands.copy()
         corrected = False
 
-        if mode in ("Automatic color detection (experimental)", "Local YOLO segmentation model") and len(suggested_bands) == int(band_count):
+        if mode in (automatic_mode_label, "Local YOLO segmentation model") and len(suggested_bands) == int(band_count):
             st.markdown("**Review or correct the detected colors**")
             st.caption(
                 "Predicted band colors can still be wrong because of lighting, image quality, or model limitations. "
@@ -1039,7 +1166,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             )
 
         annotated = current_result.get("annotated", roi)
-        if mode in ("Automatic color detection (experimental)", "Local YOLO segmentation model") and len(display_bands) == int(band_count):
+        if mode in (automatic_mode_label, "Local YOLO segmentation model") and len(display_bands) == int(band_count):
             physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
             if len(physical_runs) == int(band_count):
                 physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
