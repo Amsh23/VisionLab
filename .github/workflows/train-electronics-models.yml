@@ -20,284 +20,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  train-electronics:
-    name: Train electronics detector
+  train-and-publish:
+    name: Download datasets, train and publish models
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
       YOLO_CONFIG_DIR: ${{ runner.temp }}/ultralytics
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-training.txt
+
       - name: Install CPU training dependencies
         run: |
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-training.txt huggingface_hub pyyaml
-      - name: Download an annotated electronics dataset
-        shell: bash
+
+      - name: Download datasets and train models
+        run: python scripts/train_models_ci.py all
+
+      - name: Commit trained model checkpoints
         run: |
-          mkdir -p data models
-          TRAIN_DATA=""
-          if [ -n "${ROBOFLOW_API_KEY:-}" ]; then
-            echo "Trying the Roboflow electronics components dataset."
-            if python scripts/download_component_dataset.py --output data/component_dataset; then
-              if [ -f data/component_dataset/data.yaml ]; then
-                TRAIN_DATA="data/component_dataset/data.yaml"
-              fi
-            else
-              echo "::warning::Roboflow electronics download failed; trying the public fallback dataset."
-            fi
-          fi
-
-          if [ -z "$TRAIN_DATA" ]; then
-            echo "Downloading the public Circuit Elements YOLO dataset."
-            python - <<'PY'
-          from huggingface_hub import snapshot_download
-          import shutil
-          from pathlib import Path
-
-          target = Path("data/circuit-elements").resolve()
-          errors = []
-          for repo_id in ("LibreYOLO/circuit-elements", "Libre-YOLO/circuit-elements"):
-              try:
-                  snapshot_download(
-                      repo_id=repo_id,
-                      repo_type="dataset",
-                      local_dir=str(target),
-                      max_workers=8,
-                  )
-                  print(f"Downloaded dataset: {repo_id}")
-                  break
-              except Exception as error:
-                  errors.append(f"{repo_id}: {type(error).__name__}")
-                  if target.exists():
-                      shutil.rmtree(target, ignore_errors=True)
-          else:
-              raise SystemExit("Could not download Circuit Elements: " + "; ".join(errors))
-          PY
-            python scripts/prepare_circuit_elements_yolo.py --input data/circuit-elements --output data/circuit-elements-normalized
-            TRAIN_DATA="data/circuit-elements-normalized/data.yaml"
-          fi
-
-          if [ ! -f "$TRAIN_DATA" ]; then
-            echo "::error::No valid annotated electronics data.yaml was created."
-            exit 1
-          fi
-          echo "Training configuration: $TRAIN_DATA"
-          echo "TRAIN_DATA=$TRAIN_DATA" >> "$GITHUB_ENV"
-      - name: Train YOLO electronics detector
-        run: |
-          python scripts/train_components_yolo.py \
-            --data "$TRAIN_DATA" \
-            --model yolo11n.pt \
-            --epochs 8 \
-            --imgsz 416 \
-            --batch 8 \
-            --device cpu \
-            --project runs/electronics \
-            --name github_actions \
-            --weights-out models/components.pt
-      - name: Upload electronics model
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trained-electronics
-          path: |
-            models/components.pt
-            runs/electronics/**/*.csv
-          if-no-files-found: ignore
-          retention-days: 14
-
-  train-iot:
-    name: Train IoT board detector
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
-    env:
-      ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
-      YOLO_CONFIG_DIR: ${{ runner.temp }}/ultralytics
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-training.txt
-      - name: Install CPU training dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements-training.txt
-      - name: Download IoT board data and train
-        shell: bash
-        run: |
-          mkdir -p data models
-          TRAIN_DATA=""
-          if [ -n "${ROBOFLOW_API_KEY:-}" ]; then
-            echo "Trying the supplied Roboflow IoT dataset."
-            if python scripts/download_roboflow_dataset.py --dataset iot; then
-              if [ -f data/iot_roboflow/data.yaml ]; then
-                TRAIN_DATA="data/iot_roboflow/data.yaml"
-                MODEL_OUTPUT="models/iot_components.pt"
-                EPOCHS=20
-              fi
-            else
-              echo "::warning::Roboflow IoT download failed; trying IoTKITs."
-            fi
-          fi
-
-          if [ -z "$TRAIN_DATA" ]; then
-            echo "Downloading IoTKITs board and educational-kit dataset."
-            if python scripts/download_iotkits_dataset.py --output data/iotkits_raw \
-              && python scripts/prepare_iotkits_yolo.py --input data/iotkits_raw --output data/iotkits_yolo; then
-              TRAIN_DATA="data/iotkits_yolo/data.yaml"
-              MODEL_OUTPUT="models/iot_boards.pt"
-              EPOCHS=4
-            else
-              echo "::warning::IoTKITs download or annotation conversion failed. No IoT checkpoint will be published by this job."
-              exit 0
-            fi
-          fi
-
-          python scripts/train_components_yolo.py \
-            --data "$TRAIN_DATA" \
-            --model yolo11n.pt \
-            --epochs "$EPOCHS" \
-            --imgsz 416 \
-            --batch 8 \
-            --device cpu \
-            --project runs/iot \
-            --name github_actions \
-            --weights-out "$MODEL_OUTPUT"
-      - name: Upload IoT model
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trained-iot
-          path: |
-            models/iot_components.pt
-            models/iot_boards.pt
-            runs/iot/**/*.csv
-          if-no-files-found: ignore
-          retention-days: 14
-
-  train-resistor-colors:
-    name: Train resistor band-color models
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
-      YOLO_CONFIG_DIR: ${{ runner.temp }}/ultralytics
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-training.txt
-      - name: Install CPU training dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements-training.txt
-      - name: Train the 12-color patch classifier
-        run: |
-          mkdir -p models
-          python scripts/train_resistor_band_classifier.py \
-            --samples-per-class 1000 \
-            --output models/resistor_band_classifier.joblib
-      - name: Try training a real-photo segmentation model
-        if: env.ROBOFLOW_API_KEY != ''
-        shell: bash
-        run: |
-          set +e
-          python scripts/download_roboflow_dataset.py --dataset resistor-color-bands
-          DOWNLOAD_STATUS=$?
-          if [ "$DOWNLOAD_STATUS" -ne 0 ] || [ ! -f data/resistor_color_bands/data.yaml ]; then
-            echo "::warning::Real resistor-band dataset download was unavailable. Keeping the synthetic-patch classifier as a baseline."
-            exit 0
-          fi
-
-          python - <<'PY'
-          from pathlib import Path
-          labels = [
-              p for p in Path("data/resistor_color_bands").rglob("*.txt")
-              if "labels" in {part.casefold() for part in p.parts}
-          ]
-          polygons = 0
-          for path in labels:
-              for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                  if len(line.split()) >= 7:
-                      polygons += 1
-                      break
-              if polygons:
-                  break
-          if not polygons:
-              raise SystemExit("No YOLO segmentation polygon labels found; refusing to train a segmentation model on bounding boxes.")
-          print("Verified YOLO segmentation polygon labels.")
-          PY
-          LABEL_STATUS=$?
-          if [ "$LABEL_STATUS" -ne 0 ]; then
-            echo "::warning::Downloaded annotations were not verified segmentation polygons. No segmentation checkpoint was trained."
-            exit 0
-          fi
-
-          if python scripts/train_components_yolo.py \
-            --data data/resistor_color_bands/data.yaml \
-            --model yolo11n-seg.pt \
-            --epochs 12 \
-            --imgsz 416 \
-            --batch 4 \
-            --device cpu \
-            --project runs/resistor-color-bands \
-            --name github_actions \
-            --weights-out models/resistor_seg.pt; then
-            echo "Trained a real-photo resistor color-band segmentation model."
-          else
-            echo "::warning::Segmentation training failed; keeping the synthetic-patch classifier as a baseline."
-          fi
-      - name: Upload resistor models and metrics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trained-resistor
-          path: |
-            models/resistor_band_classifier.joblib
-            models/resistor_band_classifier.metrics.json
-            models/resistor_seg.pt
-            runs/resistor-color-bands/**/*.csv
-          if-no-files-found: ignore
-          retention-days: 14
-
-  publish-models:
-    name: Publish trained checkpoints
-    if: always()
-    needs:
-      - train-electronics
-      - train-iot
-      - train-resistor-colors
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: trained-*
-          path: models
-          merge-multiple: true
-      - name: Commit available model checkpoints
-        shell: bash
-        run: |
-          mkdir -p models
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for file in \
@@ -306,7 +57,8 @@ jobs:
             models/iot_boards.pt \
             models/resistor_seg.pt \
             models/resistor_band_classifier.joblib \
-            models/resistor_band_classifier.metrics.json; do
+            models/resistor_band_classifier.metrics.json \
+            models/training-report.json; do
             if [ -f "$file" ]; then
               git add -f "$file"
             fi
