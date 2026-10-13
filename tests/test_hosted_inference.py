@@ -1,9 +1,13 @@
 """Unit tests for Roboflow hosted-inference response normalization."""
 import unittest
+from unittest.mock import Mock, patch
+
+import requests
 
 from hosted_inference import (
     HostedInferenceResponseError,
     normalize_detection_predictions,
+    request_roboflow_detections,
     safe_error_summary,
 )
 
@@ -75,6 +79,68 @@ class DetectionResponseTests(unittest.TestCase):
                 safe = safe_error_summary(ValueError(message), api_key)
                 self.assertNotIn(api_key, safe)
                 self.assertIn("[redacted]", safe)
+
+
+class HostedHttpRequestTests(unittest.TestCase):
+    def test_request_sends_expected_parameters_and_normalizes_result(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "predictions": [{
+                "class": "ESP32", "confidence": 0.9,
+                "x": 50, "y": 40, "width": 30, "height": 20,
+            }]
+        }
+        jpeg = b"fake-jpeg-bytes"
+        with patch("hosted_inference.requests.post", return_value=response) as post:
+            detections = request_roboflow_detections(
+                jpeg,
+                "iot-components-learning-ogliq/1",
+                "not-a-real-key",
+                0.25,
+            )
+
+        self.assertEqual(detections[0]["class"], "ESP32")
+        self.assertEqual(post.call_count, 1)
+        args, kwargs = post.call_args
+        self.assertEqual(
+            args[0],
+            "https://detect.roboflow.com/iot-components-learning-ogliq/1",
+        )
+        self.assertEqual(kwargs["params"]["api_key"], "not-a-real-key")
+        self.assertEqual(kwargs["params"]["confidence"], 25)
+        self.assertEqual(kwargs["params"]["overlap"], 35)
+        self.assertEqual(kwargs["files"]["file"], ("image.jpg", jpeg, "image/jpeg"))
+        self.assertEqual(kwargs["timeout"], 60.0)
+
+    def test_http_errors_are_propagated_for_safe_ui_reporting(self):
+        response = Mock()
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "401 Client Error", response=Mock(status_code=401)
+        )
+        with patch("hosted_inference.requests.post", return_value=response):
+            with self.assertRaises(requests.HTTPError):
+                request_roboflow_detections(
+                    b"jpeg", "electronics-components-sveck/7", "secret", 0.25
+                )
+
+    def test_non_json_http_response_is_rejected(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.side_effect = ValueError("not JSON")
+        with patch("hosted_inference.requests.post", return_value=response):
+            with self.assertRaisesRegex(HostedInferenceResponseError, "non-JSON"):
+                request_roboflow_detections(
+                    b"jpeg", "electronics-components-sveck/7", "secret", 0.25
+                )
+
+    def test_invalid_confidence_does_not_send_request(self):
+        with patch("hosted_inference.requests.post") as post:
+            with self.assertRaisesRegex(ValueError, "between 0 and 1"):
+                request_roboflow_detections(
+                    b"jpeg", "electronics-components-sveck/7", "secret", 1.5
+                )
+        post.assert_not_called()
 
 
 if __name__ == "__main__":

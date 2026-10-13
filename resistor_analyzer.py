@@ -9,12 +9,11 @@ import hashlib
 import importlib.util
 
 import cv2
-import requests
 import numpy as np
 import streamlit as st
 from PIL import Image
 
-from hosted_inference import normalize_detection_predictions, safe_error_summary
+from hosted_inference import request_roboflow_detections, safe_error_summary
 
 try:
     from resistor_band_classifier import predict_band_color, load_trained_band_classifier
@@ -713,30 +712,19 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             f"{local_config['label']}: {type(error).__name__}"
                         )
 
-            # Send the selected image to Roboflow's hosted HTTP prediction API.
+            # Hosted inference is optional and requires the configured Streamlit secret.
             if api_key:
                 image_buffer = BytesIO()
                 Image.fromarray(image_rgb).save(image_buffer, format="JPEG", quality=92)
                 jpeg_bytes = image_buffer.getvalue()
                 for model_config in hosted_models:
                     try:
-                        response = requests.post(
-                            f"https://detect.roboflow.com/{model_config['id']}",
-                            params={
-                                "api_key": api_key,
-                                "confidence": max(10, int(round(float(confidence_threshold) * 100))),
-                                "overlap": 35,
-                            },
-                            files={"file": ("image.jpg", jpeg_bytes, "image/jpeg")},
-                            timeout=60,
+                        predictions = request_roboflow_detections(
+                            jpeg_bytes,
+                            model_id=model_config["id"],
+                            api_key=api_key,
+                            confidence_threshold=float(confidence_threshold),
                         )
-                        response.raise_for_status()
-                        try:
-                            prediction_payload = response.json()
-                        except ValueError as error:
-                            raise ValueError("Roboflow returned a non-JSON inference response.") from error
-                        predictions = normalize_detection_predictions(prediction_payload)
-
                         for prediction in predictions:
                             try:
                                 class_name = str(
@@ -758,10 +746,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                                 add_prediction(class_name, confidence, coords, model_config["label"])
                             except (TypeError, ValueError, OverflowError):
                                 continue
-                    except requests.RequestException as error:
-                        model_errors.append(f"{model_config['label']}: {safe_error_summary(error, api_key)}")
                     except Exception as error:
-                        model_errors.append(f"{model_config['label']}: {safe_error_summary(error, api_key)}")
+                        # Show actionable response diagnostics without leaking the configured key.
+                        model_errors.append(
+                            f"{model_config['label']}: {safe_error_summary(error, api_key)}"
+                        )
 
         # Merge duplicate predictions only when their class names and boxes overlap.
         def box_iou(first, second):

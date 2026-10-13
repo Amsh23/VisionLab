@@ -6,6 +6,8 @@ import re
 from typing import Any, Mapping
 from urllib.parse import quote, quote_plus
 
+import requests
+
 
 class HostedInferenceResponseError(ValueError):
     """Raised when a hosted detector returned an unrecognized response schema."""
@@ -254,3 +256,50 @@ def safe_error_summary(error: Exception, api_key: str = "") -> str:
     if status_code:
         return f"HTTP {status_code}" + (f": {message}" if message else "")
     return message or type(error).__name__
+
+
+
+def request_roboflow_detections(
+    image_bytes: bytes,
+    model_id: str,
+    api_key: str,
+    confidence_threshold: float,
+    *,
+    timeout: float = 60.0,
+) -> list[dict]:
+    """Request object detections from Roboflow's hosted HTTP API.
+
+    The runtime intentionally uses the lightweight HTTP API rather than the
+    inference SDK, whose dependency tree can install GUI OpenCV alongside the
+    headless wheel needed by Streamlit Cloud.
+    """
+    if not isinstance(image_bytes, (bytes, bytearray, memoryview)) or not image_bytes:
+        raise ValueError("The inference image must be non-empty JPEG bytes.")
+    if not isinstance(model_id, str) or not model_id.strip() or "/" not in model_id:
+        raise ValueError("The Roboflow model ID must include a model slug and version.")
+    api_key = str(api_key).strip()
+    if not api_key:
+        raise ValueError("ROBOFLOW_API_KEY is missing.")
+
+    threshold = _number(confidence_threshold, "confidence_threshold")
+    if not 0 <= threshold <= 1:
+        raise ValueError("Confidence threshold must be between 0 and 1.")
+
+    response = requests.post(
+        f"https://detect.roboflow.com/{model_id}",
+        params={
+            "api_key": api_key,
+            "confidence": max(10, min(100, int(round(threshold * 100)))),
+            "overlap": 35,
+        },
+        files={"file": ("image.jpg", bytes(image_bytes), "image/jpeg")},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    try:
+        payload = response.json()
+    except ValueError as error:
+        raise HostedInferenceResponseError(
+            "Roboflow returned a non-JSON inference response."
+        ) from error
+    return normalize_detection_predictions(payload)
