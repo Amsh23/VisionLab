@@ -27,7 +27,7 @@ except ImportError:
     SKLEARN_AVAILABLE = False
 
 st.set_page_config(
-    page_title="VisionLab | Computer Vision Studio",
+    page_title="VisionLab | Electronic Component Analyzer",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -42,6 +42,30 @@ st.markdown(
     .block-container { padding-top: 1.7rem; padding-bottom: 3rem; max-width: 1500px; }
     .hero-title { font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 800; letter-spacing: -1.5px; margin: 0; }
     .hero-subtitle { color: #8b95a5; font-size: 1.08rem; margin: 0.35rem 0 1.4rem 0; }
+    .core-project-card {
+        border: 1px solid rgba(64, 190, 150, .52);
+        border-left: 6px solid #28a879;
+        border-radius: 18px;
+        padding: 1.3rem 1.45rem;
+        margin: .55rem 0 1rem 0;
+        background: linear-gradient(125deg, rgba(40,168,121,.14), rgba(64,128,220,.08));
+    }
+    .core-project-kicker {
+        color: #26a879;
+        font-size: .78rem;
+        font-weight: 850;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+        margin-bottom: .35rem;
+    }
+    .core-project-title {
+        font-size: clamp(1.45rem, 3vw, 2.1rem);
+        line-height: 1.15;
+        font-weight: 900;
+        letter-spacing: -.6px;
+        margin-bottom: .6rem;
+    }
+    .core-project-copy { font-size: 1.02rem; line-height: 1.6; margin-bottom: .6rem; }
     div[data-testid="stMetric"] {
         background: rgba(128,128,128,.07); border: 1px solid rgba(128,128,128,.16);
         padding: 12px 14px; border-radius: 12px;
@@ -222,6 +246,7 @@ def draw_label(image: np.ndarray, text: str, x: int, y: int) -> None:
 # region 04: Sidebar Navigation and the Shared Image Uploader
 PAGES = [
     "Home",
+    "Electronic Component Analyzer",
     "Image Fundamentals",
     "Image Processing & Filters",
     "Edge & Shape Detection",
@@ -229,16 +254,34 @@ PAGES = [
     "Feature Detection",
     "Image Matching",
     "Image Segmentation",
-    "Electronic Component Analyzer",
     "Object Detection (YOLO)",
     "Video Processing",
     "Machine Learning Demo",
 ]
 
+
+def open_core_project() -> None:
+    """Navigate directly to the project's main electronic component analyzer."""
+    st.session_state["navigation_page"] = "Electronic Component Analyzer"
+
+
 st.sidebar.markdown("# 🔬 VisionLab")
-st.sidebar.caption("Interactive Computer Vision Learning Studio")
+st.sidebar.markdown(
+    '<div class="core-project-card"><div class="core-project-kicker">Core Project</div>'
+    '<div style="font-size:1.15rem;font-weight:900;line-height:1.25;">Electronic Component Analyzer</div>'
+    '<div style="font-size:.88rem;margin-top:.45rem;">Detect parts on a workbench and decode resistor color bands.</div></div>',
+    unsafe_allow_html=True,
+)
+st.sidebar.button(
+    "⚡ Open Main Project",
+    on_click=open_core_project,
+    type="primary",
+    key="open_core_project",
+    width="stretch",
+)
+st.sidebar.caption("Supporting tools: image processing, features, segmentation, video and ML.")
 st.sidebar.divider()
-page = st.sidebar.radio("Navigation", PAGES, key="navigation_page")
+page = st.sidebar.radio("Pages", PAGES, key="navigation_page")
 st.sidebar.divider()
 st.sidebar.markdown("### Shared Image")
 st.sidebar.caption("Upload once. The same image is available in every image module.")
@@ -293,22 +336,39 @@ st.sidebar.caption("Core: Streamlit · OpenCV · NumPy · Pillow")
 if page == "Home":
     st.markdown('<div class="hero-title">VisionLab</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="hero-subtitle">A hands-on lab for learning Computer Vision with Python, OpenCV, NumPy, and Streamlit.</div>',
+        '<div class="hero-subtitle">Computer vision with a practical electronics focus — built with Python, OpenCV, NumPy, and Streamlit.</div>',
         unsafe_allow_html=True,
     )
-    st.info("Start by loading an image in the sidebar. Explore one algorithm at a time, compare the output, inspect the example code, and download your result.")
-    cards = st.columns(3)
-    with cards[0]:
-        st.subheader("01 · Understand Images")
-        st.write("Learn pixels, dimensions, color channels, grayscale conversion, resize, crop, and geometric transformations.")
-    with cards[1]:
-        st.subheader("02 · Process and Detect")
-        st.write("Experiment with blur filters, thresholding, morphology, edges, contours, and basic shape detection.")
-    with cards[2]:
-        st.subheader("03 · Analyze and Segment")
-        st.write("Explore HSV color masks, local features, image matching, segmentation, and optional object detection.")
+    st.markdown(
+        '<div class="core-project-card">'
+        '<div class="core-project-kicker">Main Project · Featured Build</div>'
+        '<div class="core-project-title">Electronic Component Analyzer</div>'
+        '<div class="core-project-copy">A workbench-focused computer vision tool that finds electronic components in a photo, '
+        'then helps read resistor color bands and estimate resistance, multiplier, and tolerance.</div>'
+        '<div>📷 Photo or upload &nbsp; · &nbsp; 🔎 Component detection &nbsp; · &nbsp; 🎨 Resistor color-code reader &nbsp; · &nbsp; 🧮 Ohms and tolerance</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.button(
+        "⚡ Open Electronic Component Analyzer",
+        on_click=open_core_project,
+        type="primary",
+        key="home_open_core_project",
+        width="stretch",
+    )
+    feature_cols = st.columns(3)
+    with feature_cols[0]:
+        st.subheader("01 · Detect Components")
+        st.write("Run hosted Roboflow inference or use local YOLO weights to locate parts in a workbench image.")
+    with feature_cols[1]:
+        st.subheader("02 · Read Resistor Bands")
+        st.write("Estimate 4-band and 5-band resistor values, review the detected colors, and correct a band when needed.")
+    with feature_cols[2]:
+        st.subheader("03 · Explain the Result")
+        st.write("See each band's digit, multiplier or tolerance, the calculation formula, expected range, and common component uses.")
+    st.caption("The integrated analyzer is the project's main feature. Other modules below are supporting experiments for learning and testing computer-vision techniques.")
     st.divider()
-    st.subheader("Learning Roadmap")
+    st.subheader("Supporting Computer Vision Lab")
     roadmap = [
         ("Image Fundamentals", "Pixels, RGB channels, grayscale, image geometry, brightness, and contrast."),
         ("Image Processing & Filters", "Gaussian, median and bilateral filtering, sharpening, thresholding, histograms and morphology."),
@@ -316,7 +376,6 @@ if page == "Home":
         ("Color Detection", "HSV ranges, binary masks, and color-based segmentation."),
         ("Feature Detection and Matching", "Harris, Shi-Tomasi, ORB, optional SIFT, BFMatcher and homography."),
         ("Image Segmentation", "Threshold segmentation, HSV masks, GrabCut foreground extraction, and K-means clustering."),
-        ("Electronic Component Analyzer", "Capture a workbench photo, detect components with the hosted or local model, and estimate resistor values from color bands."),
         ("Optional Extensions", "YOLO object detection, video frames, and a small scikit-learn digit-classification example."),
     ]
     for title, description in roadmap:
