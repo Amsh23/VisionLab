@@ -1,0 +1,8 @@
+# Install in a dedicated training environment, not the Streamlit Cloud app environment.
+# Ultralytics installs opencv-python; keeping training separate avoids conflicts
+# with opencv-python-headless used by the hosted Streamlit app.
+ultralytics>=8.3,<9
+roboflow>=1.1
+requests
+pillow
+numpy==2.2.6
