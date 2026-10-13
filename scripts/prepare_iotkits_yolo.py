@@ -82,6 +82,24 @@ def parse_points(points) -> list[tuple[float, float]]:
     if not isinstance(points, list):
         return parsed
 
+    # COCO segmentation may wrap a polygon as a flat list:
+    # [[x1, y1, x2, y2, ...]], while LabelMe/Roboflow may use [[x1, y1], ...].
+    if points and isinstance(points[0], (list, tuple)) and len(points[0]) > 2:
+        flat_polygons = [
+            polygon for polygon in points
+            if isinstance(polygon, (list, tuple))
+            and len(polygon) >= 6
+            and len(polygon) % 2 == 0
+            and all(isinstance(value, (int, float)) for value in polygon)
+        ]
+        if flat_polygons:
+            for polygon in flat_polygons:
+                parsed.extend(
+                    (float(polygon[index]), float(polygon[index + 1]))
+                    for index in range(0, len(polygon) - 1, 2)
+                )
+            return parsed
+
     for point in points:
         if isinstance(point, dict):
             x = point.get("x", point.get("X"))
@@ -89,7 +107,8 @@ def parse_points(points) -> list[tuple[float, float]]:
             if x is not None and y is not None:
                 parsed.append((float(x), float(y)))
         elif isinstance(point, (list, tuple)) and len(point) >= 2:
-            parsed.append((float(point[0]), float(point[1])))
+            if isinstance(point[0], (int, float)) and isinstance(point[1], (int, float)):
+                parsed.append((float(point[0]), float(point[1])))
     return parsed
 
 
