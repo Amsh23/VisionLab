@@ -129,65 +129,175 @@ def classify_hsv_pixels(hsv: np.ndarray) -> np.ndarray:
     return labels
 
 
-def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dict], list[dict]]:
-    """Find narrow, color-consistent vertical runs in a tightly cropped resistor.
+def classify_hsv_color(hsv_values: np.ndarray, baseline_value: float = 0.0) -> str:
+    """Classify the center pixels of one band, using local brightness as context.
 
-    The input should show one horizontal resistor with its body filling most
-    of the crop and the complete color bands visible.
+    Hue alone is not enough for brown/orange/red or gold/yellow. Relative
+    brightness against the nearby resistor body helps separate those colors.
+    """
+    hue, saturation, value = (float(part) for part in hsv_values)
+    relative_value = value - float(baseline_value)
+
+    if value < 48:
+        return "Black"
+
+    if saturation < 38:
+        if value < 85:
+            return "Black"
+        if value < 145:
+            return "Gray"
+        if value < 218:
+            return "Silver"
+        return "White"
+
+    if hue <= 4 or hue >= 176:
+        return "Red"
+
+    if hue <= 18:
+        if value < 145 or relative_value < -22:
+            return "Brown"
+        return "Orange"
+
+    if hue <= 39:
+        if saturation >= 105 and (
+            (value >= 205 and relative_value >= -10) or relative_value >= 28
+        ):
+            return "Yellow"
+        return "Gold"
+
+    if hue <= 85:
+        return "Green"
+    if hue <= 132:
+        return "Blue"
+    return "Violet"
+
+
+def detect_band_runs(roi_rgb: np.ndarray, expected_count: int) -> tuple[list[dict], list[dict]]:
+    """Find candidate resistor bands using an adaptive color-contrast profile.
+
+    Only the central part of the crop is scanned, avoiding background and the
+    specular highlight along the top of the resistor body. A smoothed Lab-color
+    profile models the body color/lighting; narrow changes from that local
+    baseline are candidate bands. Gold and silver bands may blend into the body,
+    so short gaps between their high-contrast edges are bridged before grouping.
     """
     height, width = roi_rgb.shape[:2]
     if width < 25 or height < 8:
         return [], []
 
-    hsv = cv2.cvtColor(roi_rgb, cv2.COLOR_RGB2HSV)
-    top = int(height * 0.22)
-    bottom = max(top + 1, int(height * 0.78))
-    scan = hsv[top:bottom]
-    pixel_labels = classify_hsv_pixels(scan)
+    top = max(0, int(round(height * 0.36)))
+    bottom = min(height, max(top + 1, int(round(height * 0.64))))
+    if bottom - top < 5:
+        top, bottom = int(height * 0.25), int(height * 0.75)
+    scan_rgb = roi_rgb[top:bottom]
 
-    column_labels = []
-    for x in range(width):
-        values = pixel_labels[:, x]
-        values = values[values != ""]
-        if len(values) == 0:
-            column_labels.append(None)
+    profile_rgb = np.median(scan_rgb.astype(np.float32), axis=0).astype(np.uint8)
+    profile_lab = cv2.cvtColor(profile_rgb.reshape(1, width, 3), cv2.COLOR_RGB2LAB)[0].astype(np.float32)
+    profile_hsv = cv2.cvtColor(profile_rgb.reshape(1, width, 3), cv2.COLOR_RGB2HSV)[0].astype(np.float32)
+
+    kernel_width = max(7, min(51, int(round(width * 0.045)) | 1))
+    smooth_lab = cv2.GaussianBlur(
+        profile_lab.reshape(1, width, 3), (kernel_width, 1), 0
+    ).reshape(width, 3)
+    contrast = np.linalg.norm(profile_lab - smooth_lab, axis=1)
+
+    adjacent_delta = np.linalg.norm(np.diff(profile_lab, axis=0), axis=1)
+    median_delta = float(np.median(adjacent_delta)) if len(adjacent_delta) else 0.0
+    delta_mad = float(np.median(np.abs(adjacent_delta - median_delta))) if len(adjacent_delta) else 0.0
+    noise_floor = median_delta + 4.5 * 1.4826 * delta_mad
+    contrast_threshold = max(3.0, min(6.0, noise_floor))
+    mask = contrast >= contrast_threshold
+
+    edge_width = max(3, int(round(width * 0.035)))
+    edge_pixels = np.concatenate([profile_rgb[:edge_width], profile_rgb[-edge_width:]], axis=0)
+    edge_rgb = np.median(edge_pixels, axis=0).astype(np.uint8)
+    edge_lab = cv2.cvtColor(edge_rgb.reshape(1, 1, 3), cv2.COLOR_RGB2LAB)[0, 0].astype(np.float32)
+    middle_lab = np.median(
+        profile_lab[int(width * 0.20):max(int(width * 0.20) + 1, int(width * 0.80))],
+        axis=0,
+    )
+    edge_to_body_distance = float(np.linalg.norm(edge_lab - middle_lab))
+
+    if edge_to_body_distance < 12.0:
+        body_start, body_end = int(width * 0.02), int(width * 0.98)
+    else:
+        body_distance = np.linalg.norm(profile_lab - edge_lab, axis=1)
+        body_columns = np.flatnonzero(body_distance > 12.0)
+        if len(body_columns) >= max(12, int(width * 0.15)):
+            body_start, body_end = int(body_columns[0]), int(body_columns[-1]) + 1
+        else:
+            body_start, body_end = int(width * 0.02), int(width * 0.98)
+
+    edge_margin = max(3, int(round(width * 0.025)))
+    allowed_left = max(int(width * 0.035), body_start + edge_margin)
+    allowed_right = min(int(width * 0.965), body_end - edge_margin)
+    if allowed_right <= allowed_left:
+        allowed_left, allowed_right = int(width * 0.035), int(width * 0.965)
+
+    merge_gap = max(3, int(round(width * 0.035)))
+    index = 0
+    while index < width:
+        if mask[index]:
+            index += 1
             continue
-        counts = Counter(values.tolist())
-        color, amount = counts.most_common(1)[0]
-        coverage = amount / max(1, scan.shape[0])
-        column_labels.append(color if coverage >= 0.35 else None)
-
-    # Remove one-column speckles without eliminating narrow, real bands.
-    filtered = column_labels.copy()
-    for index in range(1, width - 1):
-        if column_labels[index - 1] == column_labels[index + 1] and column_labels[index] != column_labels[index - 1]:
-            filtered[index] = column_labels[index - 1]
-
-    raw_runs = []
-    start = 0
-    while start < width:
-        color = filtered[start]
-        end = start + 1
-        while end < width and filtered[end] == color:
+        end = index
+        while end < width and not mask[end]:
             end += 1
-        run_width = end - start
-        minimum_width = max(2, int(round(width * 0.012)))
-        maximum_width = max(minimum_width + 1, int(round(width * 0.18)))
-        if color is not None and minimum_width <= run_width <= maximum_width:
-            raw_runs.append({
-                "color": color,
-                "start": start,
-                "end": end,
-                "center": (start + end) // 2,
-                "width": run_width,
-            })
-        start = end
+        if index > 0 and end < width and end - index <= merge_gap:
+            mask[index:end] = True
+        index = end
 
-    # Keep the expected number of strongest runs, then restore spatial order.
-    selected = sorted(raw_runs, key=lambda run: run["width"], reverse=True)[:expected_count]
+    mask[:max(1, allowed_left)] = False
+    mask[max(0, allowed_right):] = False
+
+    minimum_width = max(2, int(round(width * 0.008)))
+    maximum_width = max(minimum_width + 1, int(round(width * 0.10)))
+    raw_runs: list[dict] = []
+    index = 0
+
+    while index < width:
+        if not mask[index]:
+            index += 1
+            continue
+
+        start = index
+        while index < width and mask[index]:
+            index += 1
+        end = index
+        run_width = end - start
+        if not (minimum_width <= run_width <= maximum_width):
+            continue
+
+        center = (start + end) // 2
+        if not (allowed_left <= center <= allowed_right):
+            continue
+
+        half_window = max(2, int(round(width * 0.01)))
+        core_start = max(start, center - half_window)
+        core_end = min(end, center + half_window + 1)
+        core = scan_rgb[:, core_start:core_end, :]
+        median_rgb = np.median(core.reshape(-1, 3), axis=0).astype(np.uint8)
+        median_hsv = cv2.cvtColor(median_rgb.reshape(1, 1, 3), cv2.COLOR_RGB2HSV)[0, 0]
+
+        baseline_left = max(0, center - kernel_width // 2)
+        baseline_right = min(width, center + kernel_width // 2 + 1)
+        baseline_value = float(np.median(profile_hsv[baseline_left:baseline_right, 2]))
+        color = classify_hsv_color(median_hsv, baseline_value=baseline_value)
+
+        strength = float(np.mean(contrast[start:end]))
+        raw_runs.append({
+            "color": color,
+            "start": start,
+            "end": end,
+            "center": center,
+            "width": run_width,
+            "contrast": strength,
+            "score": strength * np.sqrt(run_width),
+        })
+
+    selected = sorted(raw_runs, key=lambda run: run["score"], reverse=True)[:expected_count]
     selected.sort(key=lambda run: run["center"])
     return selected, raw_runs
-
 
 def annotate_bands(roi_rgb: np.ndarray, runs: list[dict], labels: list[str]) -> np.ndarray:
     """Draw band boxes and readable labels on a copy of the cropped image."""
@@ -487,6 +597,37 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 for row in saved_detection["records"]
             ]
             st.dataframe(visible_records, width="stretch", hide_index=True)
+            st.markdown("**What each detected part usually does**")
+            for number, record in enumerate(saved_detection["records"][:12], start=1):
+                component_name = str(record.get("Component", "component"))
+                confidence_percent = float(record.get("Confidence", 0.0)) * 100
+                st.markdown(f"**{number}. {component_name} — {confidence_percent:.0f}% confidence**")
+                lowered_name = component_name.casefold()
+                if "resistor" in lowered_name or "resister" in lowered_name:
+                    purpose = "محدود کردن جریان، تقسیم ولتاژ و تنظیم بایاس؛ مقدار اهم از روی نوارهای رنگی خوانده می‌شود."
+                elif "capacitor" in lowered_name or "condens" in lowered_name:
+                    purpose = "ذخیرهٔ موقت بار الکتریکی؛ برای صاف‌کردن ولتاژ، فیلتر نویز و کوپلاژ سیگنال کاربرد دارد."
+                elif "diode" in lowered_name:
+                    purpose = "عبور جریان عمدتاً در یک جهت؛ در یکسوسازی و محافظت از قطبیت استفاده می‌شود."
+                elif "inductor" in lowered_name or "coil" in lowered_name:
+                    purpose = "ذخیرهٔ انرژی در میدان مغناطیسی؛ در فیلترها و مبدل‌های تغذیه کاربرد دارد."
+                elif "transistor" in lowered_name:
+                    purpose = "برای سوئیچ‌کردن یا تقویت سیگنال و کنترل جریان بار استفاده می‌شود."
+                elif "led" in lowered_name:
+                    purpose = "تبدیل انرژی الکتریکی به نور؛ معمولاً نشانگر یا منبع روشنایی است."
+                elif "potentiometer" in lowered_name or "variable resistor" in lowered_name:
+                    purpose = "مقاومت قابل تنظیم برای تغییر ولتاژ یا سطح سیگنال."
+                elif "crystal" in lowered_name or "oscillator" in lowered_name:
+                    purpose = "تولید مرجع فرکانسی برای ساعت و زمان‌بندی مدار."
+                elif "cable" in lowered_name or "wire" in lowered_name:
+                    purpose = "اتصال الکتریکی برای عبور تغذیه یا سیگنال بین بخش‌های مدار."
+                elif "ic" in lowered_name or "integrated circuit" in lowered_name:
+                    purpose = "مدار مجتمع؛ بسته به نوعش عملیات منطق، کنترل، تقویت یا پردازش را انجام می‌دهد."
+                else:
+                    purpose = "مدل فقط برچسب تصویری را پیشنهاد می‌دهد؛ برای تعیین نقش دقیق، شماره قطعه و مدار باید بررسی شود."
+                st.caption(f"کاربرد رایج: {purpose}")
+            if len(saved_detection["records"]) > 12:
+                st.caption(f"برای جلوگیری از شلوغی صفحه، توضیح {len(saved_detection['records']) - 12} تشخیص دیگر مخفی مانده است.")
         else:
             st.info(
                 "The detector did not return any components above this confidence threshold. "
@@ -637,13 +778,14 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 result["decoded"] = decode_band_sequence(bands, int(band_count))
             else:
                 runs, all_runs = detect_band_runs(roi, int(band_count))
-                result["runs"] = runs
+                physical_runs = sorted(runs, key=lambda run: run["center"])
+                read_runs = physical_runs if band_order == "Left to right" else list(reversed(physical_runs))
+                result["runs"] = physical_runs
                 result["all_candidate_count"] = len(all_runs)
-                if band_order == "Right to left":
-                    runs = list(reversed(runs))
-                result["bands"] = [run["color"] for run in runs]
-                result["annotated"] = annotate_bands(roi, runs, result["bands"])
-                if len(runs) != int(band_count):
+                result["bands"] = [run["color"] for run in read_runs]
+                physical_labels = [run["color"] for run in physical_runs]
+                result["annotated"] = annotate_bands(roi, physical_runs, physical_labels)
+                if len(read_runs) != int(band_count):
                     result["error"] = (
                         f"Detected {len(runs)} likely band(s), but {band_count} are required. "
                         "Try cropping closer around the resistor body, improving the lighting, "
@@ -669,10 +811,52 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     if current_result is not None:
         st.subheader("3. Analysis Result")
+        suggested_bands = list(current_result.get("bands", []))
+        display_bands = suggested_bands.copy()
+        corrected = False
+
+        if mode == "Automatic color detection (experimental)" and len(suggested_bands) == int(band_count):
+            st.markdown("**Review or correct the detected colors**")
+            st.caption(
+                "تشخیص رنگ با نور و دوربین تغییر می‌کند. رنگ هر نوار را بررسی کن؛ "
+                "مقدار اهم و فرمول پایین با همین انتخاب‌ها دوباره محاسبه می‌شود."
+            )
+            correction_hash = hashlib.sha256(signature_text.encode("utf-8")).hexdigest()[:10]
+            correction_columns = st.columns(int(band_count))
+            corrected_bands: list[str] = []
+            for index, suggested_color in enumerate(suggested_bands):
+                if index < int(band_count) - 2:
+                    choices = DIGIT_COLORS
+                elif index == int(band_count) - 2:
+                    choices = list(MULTIPLIER_OHMS.keys())
+                else:
+                    choices = TOLERANCE_OPTIONS
+                initial_index = choices.index(suggested_color) if suggested_color in choices else 0
+                corrected_bands.append(
+                    correction_columns[index].selectbox(
+                        f"Band {index + 1}",
+                        choices,
+                        index=initial_index,
+                        key=f"res_auto_color_{roi_key}_{correction_hash}_{index}",
+                    )
+                )
+            display_bands = corrected_bands
+            corrected = display_bands != suggested_bands
+        elif current_result.get("error"):
+            st.caption(
+                "برای تشخیص ناقص، از Manual color selection استفاده کن و رنگ هر نوار را انتخاب کن."
+            )
+
         annotated = current_result.get("annotated", roi)
+        if mode == "Automatic color detection (experimental)" and len(display_bands) == int(band_count):
+            physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
+            if len(physical_runs) == int(band_count):
+                physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
+                annotated = annotate_bands(roi, physical_runs, physical_labels)
+
         output_col1, output_col2 = st.columns([1, 1])
         with output_col1:
-            st.image(annotated, caption="Band analysis", width="stretch")
+            st.image(annotated, caption="Color-band analysis (labels can be corrected below)", width="stretch")
             st.download_button(
                 "Download Analysis Image",
                 data=png_bytes(annotated),
@@ -682,26 +866,75 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 width="stretch",
             )
         with output_col2:
-            if current_result.get("bands"):
-                st.write("Band sequence:")
-                st.write(" → ".join(current_result["bands"]))
-                band_rows = [
-                    {"Band": index + 1, "Detected / selected color": color}
-                    for index, color in enumerate(current_result["bands"])
-                ]
+            if display_bands:
+                st.write("**Band sequence:**")
+                st.write(" → ".join(display_bands))
+                band_rows = []
+                digit_roles = ["رقم معنادار اول", "رقم معنادار دوم", "رقم معنادار سوم"]
+                for index, color in enumerate(display_bands):
+                    if index < int(band_count) - 2:
+                        code = DIGIT_VALUES.get(color)
+                        role = digit_roles[index]
+                        meaning = (
+                            f"رقم {code} وارد عدد اصلی مقاومت می‌شود."
+                            if code is not None
+                            else "این رنگ برای نوار رقم معتبر نیست؛ رنگ را اصلاح کن."
+                        )
+                        encoded = str(code) if code is not None else "نامعتبر"
+                    elif index == int(band_count) - 2:
+                        multiplier = MULTIPLIER_OHMS.get(color)
+                        role = "ضریب / Multiplier"
+                        encoded = f"×{multiplier:g}" if multiplier is not None else "نامعتبر"
+                        meaning = f"عدد قبلی در {multiplier:g} ضرب می‌شود." if multiplier is not None else "رنگ ضریب معتبر نیست."
+                    else:
+                        tolerance = TOLERANCE_PERCENT.get(color)
+                        role = "تلرانس / Tolerance"
+                        encoded = f"±{tolerance:g}%" if tolerance is not None else "نامعتبر"
+                        meaning = (
+                            f"مقدار واقعی معمولاً تا {tolerance:g}% با مقدار اسمی اختلاف دارد."
+                            if tolerance is not None
+                            else "رنگ تلرانس معتبر نیست."
+                        )
+                    band_rows.append({
+                        "نوار": index + 1,
+                        "رنگ": color,
+                        "کد": encoded,
+                        "نقش": role,
+                        "توضیح": meaning,
+                    })
                 st.dataframe(band_rows, width="stretch", hide_index=True)
+
+            if corrected:
+                st.info("از رنگ‌هایی که اصلاح کردی برای محاسبهٔ نتیجه استفاده شد.")
             if current_result.get("error"):
                 st.warning(current_result["error"])
-            decoded = current_result.get("decoded")
+
+            decoded = None
+            if len(display_bands) == int(band_count):
+                try:
+                    decoded = decode_band_sequence(display_bands, int(band_count))
+                except ValueError as error:
+                    st.warning(f"رنگ‌های انتخاب‌شده کد معتبری نمی‌سازند: {error}")
+
             if decoded:
                 st.metric("Estimated resistance", format_resistance(decoded["ohms"]))
                 st.metric("Tolerance", f"±{decoded['tolerance_percent']:g}%")
                 low = format_resistance(decoded["minimum_ohms"])
                 high = format_resistance(decoded["maximum_ohms"])
                 st.write(f"**Expected range:** {low} to {high}")
+                formula = (
+                    f"{decoded['digits']} × {decoded['multiplier']:g} Ω "
+                    f"= {format_resistance(decoded['ohms'])}"
+                )
+                st.markdown(f"**نحوهٔ محاسبه:** {formula}")
                 st.caption(
-                    "This is a visual estimate from the color code, not a resistance measurement. "
-                    "Verify the component with a multimeter before relying on the value in a circuit."
+                    "کاربرد مقاومت: محدود کردن جریان (مثلاً برای محافظت از LED)، تقسیم ولتاژ، "
+                    "و تنظیم بایاس مدار. این مقدار از روی کد رنگ تخمین زده شده، نه اندازه‌گیری مستقیم؛ "
+                    "برای مدار حساس با مولتی‌متر بررسی کن."
+                )
+                st.caption(
+                    f"تلرانس یعنی مقدار واقعی معمولاً در بازهٔ {low} تا {high} قرار می‌گیرد، "
+                    "با فرض سالم بودن قطعه و درست خواندن رنگ‌ها."
                 )
 
     st.divider()
