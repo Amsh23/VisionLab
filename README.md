@@ -35,6 +35,18 @@ Test sources: [resistor band detection](tests/test_resistor_band_detection.py), 
 
 **Scope note:** these checks verify application startup and specific image-processing/decoding logic; they do not establish real-world component-detection accuracy. The hosted-inference tests use mocked HTTP responses, and this demo section does not claim that a live Roboflow request or a physical-component photo was tested. For real resistor measurements, verify the result with a multimeter.
 
+## Real component photos (manual-test references)
+
+These are photographs of **physical electronic components**, not generated illustrations. They are public reference images that can be used as real-photo inputs when running VisionLab locally.
+
+| Real photo | Reference / source |
+|---|---|
+| ![Photograph of a single axial resistor](https://upload.wikimedia.org/wikipedia/commons/e/e6/Resistor.jpg) | **330 Ω, ±5%** as described by the photographer. [Original photo and CC BY-SA 3.0 license](https://commons.wikimedia.org/wiki/File:Resistor.jpg) — Nunikasi; image history includes edits by Jacek Halicki. |
+| ![Photograph of assorted physical resistors](https://upload.wikimedia.org/wikipedia/commons/3/3b/Resistors-various-01.jpeg) | Assorted real resistor bodies and band patterns. [Original photo and public-domain notice](https://commons.wikimedia.org/wiki/File:Resistors-various-01.jpeg) — Movzx. |
+| ![Photograph of assorted physical electronic components](https://upload.wikimedia.org/wikipedia/commons/9/9e/Componentes_electronicos.jpg) | Real assorted components, including capacitors and resistors. [Original photo and CC BY-SA 3.0 license](https://commons.wikimedia.org/wiki/File:Componentes_electronicos.jpg) — Ivan2010. |
+
+**Important validation status:** these photos are supplied as real-photo references, not as claimed VisionLab output. A run of the app on these photographs and a genuine screenshot of its results have **not** been captured in this update. The current automation checks application startup and unit logic; it does not submit these external images to Roboflow or produce screenshots. No detection result or real-photo accuracy is claimed here.
+
 ## Main project: Electronic Component Analyzer
 
 ### What makes this project useful
