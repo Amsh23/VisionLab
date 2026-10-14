@@ -6,46 +6,47 @@ Instead of presenting component detection as one isolated model demo, the projec
 
 The rest of VisionLab's OpenCV filters, feature matching, segmentation, video, and ML examples are supporting learning tools. They are not the project's main focus.
 
-## Demo gallery & verification
+## Real test screenshots from VisionLab
 
-[![VisionLab CI](https://github.com/Amsh23/VisionLab/actions/workflows/ci.yml/badge.svg)](https://github.com/Amsh23/VisionLab/actions/workflows/ci.yml)
+The screenshots below were captured by the project owner while testing the **running VisionLab app** with component photos. These are screenshots of the app's displayed results, not generated demo art. Detector outputs can include false positives or overlapping boxes, so the screenshots are examples of observed behavior rather than an accuracy benchmark.
 
-The images below are the repository's **synthetic resistor samples**. They make the resistor-band pipeline easy to inspect; they are not photographs of physical components or screenshots of a live deployment.
+### Resistor color-band analysis
 
-| Four-band resistor sample | Five-band resistor sample |
-|---|---|
-| [![Synthetic four-band resistor sample](data/synthetic_resistors/images/resistor_001.png)](data/synthetic_resistors/images/resistor_001.png) | [![Synthetic five-band resistor sample](data/synthetic_resistors/images/resistor_009.png)](data/synthetic_resistors/images/resistor_009.png) |
-| Expected bands: Yellow · Violet · Red · Gold | Expected bands: Yellow · Violet · Black · Brown · Brown |
-| Expected value: **4.7 kΩ ±5%** | Expected value: **4.7 kΩ ±1%** |
+![Owner-captured VisionLab resistor color-band analysis](docs/screenshots/test-resistor-analysis.webp)
 
-### Automated checks
+The app's resistor reader showed **Brown → Red → Brown → Gold**, calculated **120 Ω ±5%**, and displayed the calculation in the interface. Confirm values against the physical component with a multimeter.
 
-The latest successful [VisionLab CI run](https://github.com/Amsh23/VisionLab/actions/runs/38433922701) on **13 October 2026** reported:
+### Real resistor photo — component detection
 
-| Check | Result |
-|---|---|
-| Streamlit page startup | All 12 pages passed the smoke test |
-| Four-band color detection | Synthetic Yellow–Violet–Red–Gold sequence detected in the unit test |
-| Five-band color detection | Synthetic Yellow–Violet–Black–Brown–Brown sequence detected in the unit test |
-| Resistance decoding | Unit tests verify 4.7 kΩ ±5%, 4.7 kΩ ±1%, and 1.0 Ω ±10% examples |
-| Hosted-inference response handling | Unit tests cover response normalization, bounding boxes, malformed responses, HTTP errors, and API-key redaction using mocked HTTP responses |
-| Synthetic dataset generator | Smoke test generated 12 images and a labels CSV |
+![Owner-captured VisionLab detection result for a blue axial resistor](docs/screenshots/test-resistor-detection.webp)
 
-Test sources: [resistor band detection](tests/test_resistor_band_detection.py), [resistor decoder](tests/test_resistor_decoder.py), and [hosted inference](tests/test_hosted_inference.py).
+The detector labeled the blue axial component **Resistor · 72% confidence** at a displayed confidence threshold of **0.60**.
 
-**Scope note:** these checks verify application startup and specific image-processing/decoding logic; they do not establish real-world component-detection accuracy. The hosted-inference tests use mocked HTTP responses, and this demo section does not claim that a live Roboflow request or a physical-component photo was tested. For real resistor measurements, verify the result with a multimeter.
+### Mixed components / resistors
 
-## Real component photos (manual-test references)
+![Owner-captured VisionLab detector output on a photo of assorted real components](docs/screenshots/test-mixed-components.webp)
 
-These are photographs of **physical electronic components**, not generated illustrations. They are public reference images that can be used as real-photo inputs when running VisionLab locally.
+This run showed **3 detections** at a displayed confidence threshold of **0.10**. The count and labels are copied from the screenshot; they are not a verified ground-truth count.
 
-| Real photo | Reference / source |
-|---|---|
-| ![Photograph of a single axial resistor](https://upload.wikimedia.org/wikipedia/commons/e/e6/Resistor.jpg) | **330 Ω, ±5%** as described by the photographer. [Original photo and CC BY-SA 3.0 license](https://commons.wikimedia.org/wiki/File:Resistor.jpg) — Nunikasi; image history includes edits by Jacek Halicki. |
-| ![Photograph of assorted physical resistors](https://upload.wikimedia.org/wikipedia/commons/5/57/Resistors-various-01.jpeg) | Assorted real resistor bodies and band patterns. [Original photo and public-domain notice](https://commons.wikimedia.org/wiki/File:Resistors-various-01.jpeg) — Movzx. |
-| ![Photograph of assorted physical electronic components](https://upload.wikimedia.org/wikipedia/commons/9/9e/Componentes_electronicos.jpg) | Real assorted components, including capacitors and resistors. [Original photo and CC BY-SA 3.0 license](https://commons.wikimedia.org/wiki/File:Componentes_electronicos.jpg) — Ivan2010. |
+### Red LED
 
-**Important validation status:** these photos are supplied as real-photo references, not as claimed VisionLab output. A run of the app on these photographs and a genuine screenshot of its results have **not** been captured in this update. The current automation checks application startup and unit logic; it does not submit these external images to Roboflow or produce screenshots. No detection result or real-photo accuracy is claimed here.
+![Owner-captured VisionLab detection result for a red LED](docs/screenshots/test-led-detection.webp)
+
+The app labeled the red LED **LED-Light · 93% confidence** and displayed **1 component detected**.
+
+### Electrolytic capacitor — false-positive example
+
+![Owner-captured VisionLab result on an electrolytic capacitor photo](docs/screenshots/test-capacitor-detection.webp)
+
+The displayed output labeled this photo **LED-Light · 86%** and **Variable_resistor · 71%**, with **2 components detected**. These labels appear questionable for a capacitor photo, so this is recorded as a failure case rather than a successful capacitor identification.
+
+### Transistors — overlapping detections
+
+![Owner-captured VisionLab detection results on a photo of physical transistors](docs/screenshots/test-transistor-detection.webp)
+
+The screenshot shows multiple transistor/BJT labels with overlapping boxes and **15 detections**. This demonstrates that duplicate/overlapping predictions can occur; it does not mean 15 distinct transistors were correctly identified.
+
+These screenshots document manual tests on the currently deployed app. They are illustrative observations only and do not establish general model accuracy. No source code or app behavior is changed by this documentation update.
 
 ## Main project: Electronic Component Analyzer
 
