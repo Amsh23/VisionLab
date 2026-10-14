@@ -6,6 +6,35 @@ Instead of presenting component detection as one isolated model demo, the projec
 
 The rest of VisionLab's OpenCV filters, feature matching, segmentation, video, and ML examples are supporting learning tools. They are not the project's main focus.
 
+## Demo gallery & verification
+
+[![VisionLab CI](https://github.com/Amsh23/VisionLab/actions/workflows/ci.yml/badge.svg)](https://github.com/Amsh23/VisionLab/actions/workflows/ci.yml)
+
+The images below are the repository's **synthetic resistor samples**. They make the resistor-band pipeline easy to inspect; they are not photographs of physical components or screenshots of a live deployment.
+
+| Four-band resistor sample | Five-band resistor sample |
+|---|---|
+| [![Synthetic four-band resistor sample](data/synthetic_resistors/images/resistor_001.png)](data/synthetic_resistors/images/resistor_001.png) | [![Synthetic five-band resistor sample](data/synthetic_resistors/images/resistor_009.png)](data/synthetic_resistors/images/resistor_009.png) |
+| Expected bands: Yellow · Violet · Red · Gold | Expected bands: Yellow · Violet · Black · Brown · Brown |
+| Expected value: **4.7 kΩ ±5%** | Expected value: **4.7 kΩ ±1%** |
+
+### Automated checks
+
+The latest successful [VisionLab CI run](https://github.com/Amsh23/VisionLab/actions/runs/38433922701) on **13 October 2026** reported:
+
+| Check | Result |
+|---|---|
+| Streamlit page startup | All 12 pages passed the smoke test |
+| Four-band color detection | Synthetic Yellow–Violet–Red–Gold sequence detected in the unit test |
+| Five-band color detection | Synthetic Yellow–Violet–Black–Brown–Brown sequence detected in the unit test |
+| Resistance decoding | Unit tests verify 4.7 kΩ ±5%, 4.7 kΩ ±1%, and 1.0 Ω ±10% examples |
+| Hosted-inference response handling | Unit tests cover response normalization, bounding boxes, malformed responses, HTTP errors, and API-key redaction using mocked HTTP responses |
+| Synthetic dataset generator | Smoke test generated 12 images and a labels CSV |
+
+Test sources: [resistor band detection](tests/test_resistor_band_detection.py), [resistor decoder](tests/test_resistor_decoder.py), and [hosted inference](tests/test_hosted_inference.py).
+
+**Scope note:** these checks verify application startup and specific image-processing/decoding logic; they do not establish real-world component-detection accuracy. The hosted-inference tests use mocked HTTP responses, and this demo section does not claim that a live Roboflow request or a physical-component photo was tested. For real resistor measurements, verify the result with a multimeter.
+
 ## Main project: Electronic Component Analyzer
 
 ### What makes this project useful
