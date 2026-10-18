@@ -8,6 +8,7 @@ import csv
 import hashlib
 import importlib.util
 
+import av
 import cv2
 import numpy as np
 import streamlit as st
@@ -247,8 +248,7 @@ def detect_band_runs(
         if not body_mask[index]:
             index += 1
             continue
-        body_start = index
-        while index < width and body_mask[index]:
+        body_start = index        while index < width and body_mask[index]:
             index += 1
         body_segments.append((body_start, index))
 
@@ -497,8 +497,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     )
     st.info(
         "Use the shared uploader or start the live webcam. The preview runs continuously; "
-        "Capture & Detect Components analyzes the current camera frame. "
-        "For resistor values, use the close-up crop and verify important readings with a multimeter."
+        "Capture & Detect Components analyzes the current camera frame. "        "For resistor values, use the close-up crop and verify important readings with a multimeter."
     )
 
     image_source = st.radio(
@@ -510,60 +509,49 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     selected_token = source_token
 
     if image_source == "Webcam":
-        class LiveComponentCamera(VideoProcessorBase):
+        model_path = Path(__file__).resolve().parent / "models" / "components.pt"
+
+        if importlib.util.find_spec("ultralytics") is None:
+            st.error("Ultralytics is not installed. Run: python -m pip install ultralytics")
+            return
+        if not model_path.is_file():
+            st.error(f"Local component model was not found: {model_path}")
+            return
+
+        class LiveComponentDetector(VideoProcessorBase):
             def __init__(self):
-                self.latest_frame = None
+                self.model = load_local_yolo_model(str(model_path))
+                self.error = None
 
             def recv(self, frame):
-                frame_rgb = frame.to_ndarray(format="rgb24")
-                self.latest_frame = frame_rgb.copy()
-                return frame
+                try:
+                    frame_bgr = frame.to_ndarray(format="bgr24")
+                    prediction = self.model.predict(
+                        source=frame_bgr,
+                        conf=0.25,
+                        imgsz=640,
+                        verbose=False,
+                    )[0]
+                    annotated_bgr = prediction.plot()
+                    return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
+                except Exception as error:
+                    self.error = f"{type(error).__name__}: {error}"
+                    return frame
 
-        st.caption(
-            "Live camera preview. Choose CatCam in the browser camera picker if prompted. "
-            "Click Capture & Detect Components to analyze the current live frame."
-        )
+        st.caption("Live component detection. Start the camera stream; detections update automatically on the live video.")
         camera_ctx = webrtc_streamer(
-            key="visionlab_live_catcam",
+            key="visionlab_live_component_detection",
             mode=WebRtcMode.SENDRECV,
-            video_processor_factory=LiveComponentCamera,
+            video_processor_factory=LiveComponentDetector,
             media_stream_constraints={"video": True, "audio": False},
-            rtc_configuration={
-                "iceServers": [
-                    {"urls": ["stun:stun.l.google.com:19302"]},
-                    {"urls": ["stun:stun1.l.google.com:19302"]},
-                ]
-            },
             async_processing=True,
         )
-        capture_col, clear_col = st.columns(2)
-        capture_clicked = capture_col.button(
-            "Capture & Detect Components",
-            type="primary",
-            key="capture_live_component_frame",
-            use_container_width=True,
-        )
-        clear_clicked = clear_col.button(
-            "Clear Captured Frame",
-            key="clear_live_component_frame",
-            use_container_width=True,
-        )
-        if clear_clicked:
-            st.session_state.pop("visionlab_live_captured_frame", None)
-            st.session_state.pop("visionlab_live_captured_token", None)
-        if capture_clicked:
-            processor = camera_ctx.video_processor
-            latest_frame = getattr(processor, "latest_frame", None) if processor else None
-            if latest_frame is None:
-                st.warning("The live camera has not delivered a frame yet. Wait for the preview, then try again.")
-                return
-            captured = np.asarray(latest_frame, dtype=np.uint8).copy()
-            st.session_state["visionlab_live_captured_frame"] = captured
-            st.session_state["visionlab_live_captured_token"] = hashlib.sha256(captured.tobytes()).hexdigest()[:20]
-            st.session_state["visionlab_run_detection_after_capture"] = True
+        processor = camera_ctx.video_processor
+        if processor is not None and getattr(processor, "error", None):
+            st.warning(f"Live detection issue: {processor.error}")
+        return
 
-        image_rgb = st.session_state.get("visionlab_live_captured_frame")
-        if image_rgb is None:
+    if image_rgb is None:
             st.info("Start the webcam preview, then click Capture & Detect Components. The selected frame will be analyzed automatically.")
             return
         selected_token = str(st.session_state.get("visionlab_live_captured_token", "live-frame"))
@@ -747,8 +735,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                             names = prediction.names
                             class_name = (
                                 names.get(class_id, class_id)
-                                if isinstance(names, dict)
-                                else names[class_id]
+                                if isinstance(names, dict)                                else names[class_id]
                             )
                             confidence = float(box.conf[0].item())
                             coords = box.xyxy[0].detach().cpu().numpy().astype(float).tolist()
@@ -997,8 +984,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     step_y = max(1, image_height // 100)
 
     c1, c2, c3, c4 = st.columns(4)
-    x1 = c1.number_input("Left (X1)", 0, image_width - 1, int(default_box[0]), step=step_x, key=f"res_roi_x1_{roi_key}")
-    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, int(default_box[1]), step=step_y, key=f"res_roi_y1_{roi_key}")
+    x1 = c1.number_input("Left (X1)", 0, image_width - 1, int(default_box[0]), step=step_x, key=f"res_roi_x1_{roi_key}")    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, int(default_box[1]), step=step_y, key=f"res_roi_y1_{roi_key}")
     x2 = c3.number_input("Right (X2)", 1, image_width, int(default_box[2]), step=step_x, key=f"res_roi_x2_{roi_key}")
     y2 = c4.number_input("Bottom (Y2)", 1, image_height, int(default_box[3]), step=step_y, key=f"res_roi_y2_{roi_key}")
 
@@ -1247,8 +1233,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         if mode in (automatic_mode_label, experimental_classifier_label, "Local YOLO segmentation model") and len(display_bands) == int(band_count):
             physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
             if len(physical_runs) == int(band_count):
-                physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
-                annotated = annotate_bands(roi, physical_runs, physical_labels)
+                physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))                annotated = annotate_bands(roi, physical_runs, physical_labels)
 
         output_col1, output_col2 = st.columns([1, 1])
         with output_col1:
