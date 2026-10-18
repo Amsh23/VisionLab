@@ -248,7 +248,8 @@ def detect_band_runs(
         if not body_mask[index]:
             index += 1
             continue
-        body_start = index        while index < width and body_mask[index]:
+        body_start = index
+        while index < width and body_mask[index]:
             index += 1
         body_segments.append((body_start, index))
 
