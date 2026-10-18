@@ -520,8 +520,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 return frame
 
         st.caption(
-            "Live camera preview. Choose CatCam in the browser camera permission/device picker if prompted, "
-            "then click Capture Current Frame to run component analysis on the live feed."
+            "Live camera preview. Choose CatCam in the browser camera picker if prompted. "
+            "Click Capture & Detect Components to analyze the current live frame."
         )
         camera_ctx = webrtc_streamer(
             key="visionlab_live_catcam",
@@ -538,7 +538,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         )
         capture_col, clear_col = st.columns(2)
         capture_clicked = capture_col.button(
-            "Capture Current Frame",
+            "Capture & Detect Components",
             type="primary",
             key="capture_live_component_frame",
             use_container_width=True,
@@ -560,10 +560,11 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             captured = np.asarray(latest_frame, dtype=np.uint8).copy()
             st.session_state["visionlab_live_captured_frame"] = captured
             st.session_state["visionlab_live_captured_token"] = hashlib.sha256(captured.tobytes()).hexdigest()[:20]
+            st.session_state["visionlab_run_detection_after_capture"] = True
 
         image_rgb = st.session_state.get("visionlab_live_captured_frame")
         if image_rgb is None:
-            st.info("Start the webcam preview, then click Capture Current Frame. The live feed itself is not analyzed until you capture a frame.")
+            st.info("Start the webcam preview, then click Capture & Detect Components. The selected frame will be analyzed automatically.")
             return
         selected_token = str(st.session_state.get("visionlab_live_captured_token", "live-frame"))
 
@@ -683,15 +684,20 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "No hosted detector is configured. Add ROBOFLOW_API_KEY under Streamlit app settings, "
             "or run locally with Ultralytics installed and a trained checkpoint enabled."
         )
-    run_detection = st.button(
-        "Detect Electronic and IoT Components",
-        type="primary",
-        key="components_run_hosted_detection",
-        disabled=not can_run_detection,
-        width="stretch",
-    )
+    if image_source == "Webcam":
+        run_detection = bool(st.session_state.pop("visionlab_run_detection_after_capture", False))
+    else:
+        run_detection = st.button(
+            "Detect Electronic and IoT Components",
+            type="primary",
+            key="components_run_hosted_detection",
+            disabled=not can_run_detection,
+            width="stretch",
+        )
 
-    if run_detection:
+    if run_detection and not can_run_detection:
+        st.error("Component detection is unavailable. Configure ROBOFLOW_API_KEY in Streamlit app settings.")
+    elif run_detection:
         candidates = []
         model_errors = []
         image_h, image_w = image_rgb.shape[:2]
