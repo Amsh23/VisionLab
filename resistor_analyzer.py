@@ -502,89 +502,28 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     image_source = st.radio(
         "Image source",
-        ["Use shared image", "Live webcam"],
+        ["Use shared image", "Webcam"],
         horizontal=True,
         key="electronics_image_source",
     )
     selected_token = source_token
 
-    if image_source == "Live webcam":
-        try:
-            from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
-
-            class LiveComponentCamera(VideoProcessorBase):
-                def __init__(self):
-                    self.latest_frame = None
-
-                def transform(self, frame):
-                    frame_rgb = frame.to_ndarray(format="rgb24")
-                    self.latest_frame = frame_rgb.copy()
-                    return frame_rgb
-
-            # STUN helps the browser discover a route to the hosted Streamlit server.
-            # If the current network blocks direct WebRTC traffic, configure TURN credentials
-            # in Streamlit secrets (see .streamlit/secrets.toml.example / README).
-            ice_servers = [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["stun:stun1.l.google.com:19302"]},
-            ]
-            try:
-                turn_url = str(st.secrets.get("TURN_SERVER_URL", "")).strip()
-                turn_username = str(st.secrets.get("TURN_USERNAME", "")).strip()
-                turn_credential = str(st.secrets.get("TURN_CREDENTIAL", "")).strip()
-                if turn_url and turn_username and turn_credential:
-                    ice_servers.append({
-                        "urls": [turn_url],
-                        "username": turn_username,
-                        "credential": turn_credential,
-                    })
-            except Exception:
-                # Secrets are optional; public STUN remains available for basic testing.
-                pass
-
-            camera_ctx = webrtc_streamer(
-                key="electronic-component-live-camera",
-                mode=WebRtcMode.SENDRECV,
-                rtc_configuration={"iceServers": ice_servers},
-                video_processor_factory=LiveComponentCamera,
-                media_stream_constraints={
-                    "video": {
-                        "width": {"ideal": 1280},
-                        "height": {"ideal": 720},
-                        "frameRate": {"ideal": 30, "max": 30},
-                    },
-                    "audio": False,
-                },
-                async_processing=True,
-            )
-            if not camera_ctx.state.playing:
-                st.info(
-                    "Allow camera access and press START. In the camera selector, choose "
-                    "CatCam if you want to use your phone feed. If connection times out, try "
-                    "another network or configure TURN_SERVER_URL, TURN_USERNAME, and "
-                    "TURN_CREDENTIAL in Streamlit secrets; STUN alone cannot bypass every firewall."
-                )
-                return
-            if st.button(
-                "Analyze Current Webcam Frame",
-                type="primary",
-                key="electronics_analyze_live_frame",
-                width="stretch",
-            ):
-                transformer = camera_ctx.video_processor
-                if transformer is None or transformer.latest_frame is None:
-                    st.warning("No webcam frame is available yet. Wait for the preview, then try again.")
-                    return
-                image_rgb = transformer.latest_frame.copy()
-                selected_token = hashlib.sha256(image_rgb.tobytes()).hexdigest()[:20]
-            else:
-                st.caption("The live preview is active. Click Analyze Current Webcam Frame to detect the components currently in view.")
-                return
-        except ImportError:
-            st.error("Live webcam support is not installed. Install the streamlit-webrtc package and restart the app.")
+    if image_source == "Webcam":
+        # Use Streamlit's native browser camera capture instead of WebRTC.
+        # This avoids server-side ICE/STUN/TURN connection failures and does not
+        # resize, recolor, or otherwise alter the captured image before analysis.
+        camera_photo = st.camera_input(
+            "Select your webcam in the browser/OS camera settings, then take a photo",
+            key="electronic_component_camera_capture",
+        )
+        if camera_photo is None:
+            st.caption("Choose the CatCam webcam in your browser's camera settings if needed, then capture a frame.")
             return
+        try:
+            image_rgb = np.asarray(Image.open(camera_photo).convert("RGB"))
+            selected_token = hashlib.sha256(camera_photo.getvalue()).hexdigest()[:20]
         except Exception as error:
-            st.error(f"Could not start the live webcam: {type(error).__name__}: {error}")
+            st.error(f"Could not read the captured webcam image: {type(error).__name__}: {error}")
             return
 
     if image_rgb is None:
