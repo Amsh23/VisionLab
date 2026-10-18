@@ -981,7 +981,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     step_y = max(1, image_height // 100)
 
     c1, c2, c3, c4 = st.columns(4)
-    x1 = c1.number_input("Left (X1)", 0, image_width - 1, int(default_box[0]), step=step_x, key=f"res_roi_x1_{roi_key}")    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, int(default_box[1]), step=step_y, key=f"res_roi_y1_{roi_key}")
+    x1 = c1.number_input("Left (X1)", 0, image_width - 1, int(default_box[0]), step=step_x, key=f"res_roi_x1_{roi_key}")
+    y1 = c2.number_input("Top (Y1)", 0, image_height - 1, int(default_box[1]), step=step_y, key=f"res_roi_y1_{roi_key}")
     x2 = c3.number_input("Right (X2)", 1, image_width, int(default_box[2]), step=step_x, key=f"res_roi_x2_{roi_key}")
     y2 = c4.number_input("Bottom (Y2)", 1, image_height, int(default_box[3]), step=step_y, key=f"res_roi_y2_{roi_key}")
 
