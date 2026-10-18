@@ -1231,7 +1231,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         if mode in (automatic_mode_label, experimental_classifier_label, "Local YOLO segmentation model") and len(display_bands) == int(band_count):
             physical_runs = sorted(current_result.get("runs", []), key=lambda run: run["center"])
             if len(physical_runs) == int(band_count):
-                physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))                annotated = annotate_bands(roi, physical_runs, physical_labels)
+                physical_labels = display_bands if band_order == "Left to right" else list(reversed(display_bands))
+                annotated = annotate_bands(roi, physical_runs, physical_labels)
 
         output_col1, output_col2 = st.columns([1, 1])
         with output_col1:
