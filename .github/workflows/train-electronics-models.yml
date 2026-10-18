@@ -92,6 +92,7 @@ jobs:
           git fetch origin main
           git reset --mixed origin/main
           for file in \
+            models/base/*.pt \
             models/components.pt \
             models/iot_components.pt \
             models/iot_boards.pt \
