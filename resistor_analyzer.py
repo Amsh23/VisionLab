@@ -495,35 +495,62 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         "and the standards-based lookup table calculates resistance and tolerance."
     )
     st.info(
-        "Use the shared uploader or capture a photo of your workbench with your webcam. "
-        "The full-scene detector can locate electronic components when a model is available; "
-        "the resistor reader estimates ohms from a close crop. A camera capture is a still photo, not a continuous live stream."
+        "Use the shared uploader or start the live webcam. The camera preview runs continuously; "
+        "select Analyze Current Frame to run the component detector on what the camera sees. "
+        "For resistor values, use the close-up crop and verify important readings with a multimeter."
     )
 
     image_source = st.radio(
         "Image source",
-        ["Use shared image", "Take a webcam photo"],
+        ["Use shared image", "Live webcam"],
         horizontal=True,
         key="electronics_image_source",
     )
     selected_token = source_token
 
-    if image_source == "Take a webcam photo":
-        camera_photo = st.camera_input(
-            "Open your camera, point it at the components on your desk, and take a picture",
-            key="electronics_camera_capture",
-            help="Allow camera access in your browser. On Streamlit Community Cloud, open the app using HTTPS.",
-        )
-        if camera_photo is None:
-            st.info("Take a photo to begin component detection.")
-            return
+    if image_source == "Live webcam":
         try:
-            camera_bytes = camera_photo.getvalue()
-            with Image.open(BytesIO(camera_bytes)) as captured:
-                image_rgb = np.array(captured.convert("RGB"), dtype=np.uint8, copy=True)
-            selected_token = hashlib.sha256(camera_bytes).hexdigest()[:20]
+            from streamlit_webrtc import VideoTransformerBase, WebRtcMode, webrtc_streamer
+
+            class LiveComponentCamera(VideoTransformerBase):
+                def __init__(self):
+                    self.latest_frame = None
+
+                def transform(self, frame):
+                    frame_rgb = frame.to_ndarray(format="rgb24")
+                    self.latest_frame = frame_rgb.copy()
+                    return frame_rgb
+
+            camera_ctx = webrtc_streamer(
+                key="electronic-component-live-camera",
+                mode=WebRtcMode.SENDRECV,
+                video_transformer_factory=LiveComponentCamera,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+            if not camera_ctx.state.playing:
+                st.info("Allow camera access and start the webcam to see the live preview.")
+                return
+            if st.button(
+                "Analyze Current Webcam Frame",
+                type="primary",
+                key="electronics_analyze_live_frame",
+                width="stretch",
+            ):
+                transformer = camera_ctx.video_transformer
+                if transformer is None or transformer.latest_frame is None:
+                    st.warning("No webcam frame is available yet. Wait for the preview, then try again.")
+                    return
+                image_rgb = transformer.latest_frame.copy()
+                selected_token = hashlib.sha256(image_rgb.tobytes()).hexdigest()[:20]
+            else:
+                st.caption("The live preview is active. Click Analyze Current Webcam Frame to detect the components currently in view.")
+                return
+        except ImportError:
+            st.error("Live webcam support is not installed. Install the streamlit-webrtc package and restart the app.")
+            return
         except Exception as error:
-            st.error(f"Could not read the camera image: {error}")
+            st.error(f"Could not start the live webcam: {type(error).__name__}: {error}")
             return
 
     if image_rgb is None:
