@@ -521,15 +521,49 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                     self.latest_frame = frame_rgb.copy()
                     return frame_rgb
 
+            # STUN helps the browser discover a route to the hosted Streamlit server.
+            # If the current network blocks direct WebRTC traffic, configure TURN credentials
+            # in Streamlit secrets (see .streamlit/secrets.toml.example / README).
+            ice_servers = [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["stun:stun1.l.google.com:19302"]},
+            ]
+            try:
+                turn_url = str(st.secrets.get("TURN_SERVER_URL", "")).strip()
+                turn_username = str(st.secrets.get("TURN_USERNAME", "")).strip()
+                turn_credential = str(st.secrets.get("TURN_CREDENTIAL", "")).strip()
+                if turn_url and turn_username and turn_credential:
+                    ice_servers.append({
+                        "urls": [turn_url],
+                        "username": turn_username,
+                        "credential": turn_credential,
+                    })
+            except Exception:
+                # Secrets are optional; public STUN remains available for basic testing.
+                pass
+
             camera_ctx = webrtc_streamer(
                 key="electronic-component-live-camera",
                 mode=WebRtcMode.SENDRECV,
+                rtc_configuration={"iceServers": ice_servers},
                 video_processor_factory=LiveComponentCamera,
-                media_stream_constraints={"video": True, "audio": False},
+                media_stream_constraints={
+                    "video": {
+                        "width": {"ideal": 1280},
+                        "height": {"ideal": 720},
+                        "frameRate": {"ideal": 30, "max": 30},
+                    },
+                    "audio": False,
+                },
                 async_processing=True,
             )
             if not camera_ctx.state.playing:
-                st.info("Allow camera access and start the webcam to see the live preview.")
+                st.info(
+                    "Allow camera access and press START. In the camera selector, choose "
+                    "CatCam if you want to use your phone feed. If connection times out, try "
+                    "another network or configure TURN_SERVER_URL, TURN_USERNAME, and "
+                    "TURN_CREDENTIAL in Streamlit secrets; STUN alone cannot bypass every firewall."
+                )
                 return
             if st.button(
                 "Analyze Current Webcam Frame",
