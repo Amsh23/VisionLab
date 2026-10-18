@@ -74,6 +74,7 @@ jobs:
             models/iot_components.pt \
             models/iot_boards.pt \
             models/resistor_seg.pt \
+            models/resistor_value_seg.pt \
             models/resistor_band_classifier.joblib \
             models/resistor_band_classifier.metrics.json \
             models/training-report.json; do
