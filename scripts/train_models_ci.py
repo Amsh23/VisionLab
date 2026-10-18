@@ -77,7 +77,7 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
         "--data", str(data_file),
         "--model", "yolo11s-seg.pt" if segmentation else "yolo11s.pt",
         "--epochs", str(epochs),
-        "--imgsz", "512",
+        "--imgsz", "640",
         "--batch", "4" if segmentation else "8",
         "--device", "cpu",
         "--project", f"runs/{name}",
