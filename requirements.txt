@@ -7,3 +7,5 @@ scikit-learn
 pandas
 requests
 streamlit-webrtc
+streamlit-webrtc
+av
