@@ -134,19 +134,8 @@ def train_iot(report: dict) -> None:
         except Exception as error:
             report["warnings"].append(f"Roboflow IoT download: {type(error).__name__}")
 
-    if data_file is None and not key:
-        report["warnings"].append(
-            "Local IoT training skipped: GitHub Actions secret ROBOFLOW_API_KEY is not configured. "
-            "The supplied Roboflow IoT_Dataset contains annotations but no hosted model; its dataset export "
-            "needs the Actions secret. The Streamlit app uses a separate already-trained public IoT model."
-        )
-        print(
-            "WARNING: no GitHub Actions ROBOFLOW_API_KEY; skipping local IoT dataset export instead of "
-            "calling the Mendeley endpoint that returned HTTP 403.",
-            flush=True,
-        )
-        return
-
+    # If the private-key Roboflow export is unavailable, still try the public
+    # IoTKITs dataset and its annotations instead of skipping local IoT training.
     if data_file is None:
         try:
             run_command([
@@ -217,10 +206,12 @@ def train_resistor_colors(report: dict) -> None:
     key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
     if not key:
         report["warnings"].append(
-            "Real-photo resistor-band segmentation was skipped because the GitHub Actions ROBOFLOW_API_KEY secret is not configured."
+            "Real-photo resistor-band models were skipped because the GitHub Actions "
+            "ROBOFLOW_API_KEY secret is not configured."
         )
         return
 
+    # Model A: instance segmentation of individual resistor color bands.
     try:
         run_command([
             PYTHON, "scripts/download_roboflow_dataset.py",
@@ -245,8 +236,43 @@ def train_resistor_colors(report: dict) -> None:
         })
     except Exception as error:
         report["warnings"].append(
-            f"Real-photo resistor-band segmentation was not produced: {type(error).__name__}. "
-            "The synthetic patch classifier remains available as an unvalidated baseline."
+            f"Resistor color-band instance segmentation was not produced: {type(error).__name__}: {error}"
+        )
+
+    # Model B: preserve the supplied semantic-mask dataset as a separate checkpoint.
+    # It has a different label schema from individual band-color polygons, so it
+    # must not overwrite models/resistor_seg.pt.
+    try:
+        run_command([
+            PYTHON, "scripts/download_roboflow_dataset.py",
+            "--dataset", "resistor-segmentation",
+        ])
+        raw = DATA / "resistor_value_segmentation"
+        converted = DATA / "resistor_value_seg_yolo"
+        run_command([
+            PYTHON, "scripts/prepare_resistor_segmentation_yolo.py",
+            "--input", str(raw), "--output", str(converted), "--background-value", "0",
+        ])
+        data_file = dataset_yaml(converted)
+        if data_file is None or not has_segmentation_polygons(converted):
+            raise RuntimeError("The semantic-mask export did not produce valid YOLO polygons.")
+        train_yolo(
+            data_file,
+            MODELS / "resistor_value_seg.pt",
+            "resistor-value-segmentation",
+            epochs=12,
+            segmentation=True,
+        )
+        report["models"].append({
+            "file": "models/resistor_value_seg.pt",
+            "dataset": "Roboflow Resistor Value Determination",
+            "task": "experimental resistor semantic-mask segmentation converted to polygons",
+            "warning": "Converted semantic masks are approximate; validate class mapping on real photos.",
+        })
+    except Exception as error:
+        report["warnings"].append(
+            f"Resistor value semantic-segmentation model was not produced: {type(error).__name__}: {error}. "
+            "Inspect mask background values and class IDs before relying on this model."
         )
 
 
