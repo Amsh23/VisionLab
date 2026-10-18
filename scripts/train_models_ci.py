@@ -75,7 +75,7 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
     run_command([
         PYTHON, "scripts/train_components_yolo.py",
         "--data", str(data_file),
-        "--model", "yolo11n-seg.pt" if segmentation else "yolo11n.pt",
+        "--model", "yolo11s-seg.pt" if segmentation else "yolo11s.pt",
         "--epochs", str(epochs),
         "--imgsz", "512",
         "--batch", "4" if segmentation else "8",
@@ -91,7 +91,11 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
 def train_electronics(report: dict) -> None:
     key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
     data_file: Path | None = None
-    if key:
+    cached_candidate = DATA / "component_dataset" / "data.yaml"
+    if cached_candidate.is_file():
+        data_file = cached_candidate
+        print(f"Reusing cached electronics dataset: {data_file}", flush=True)
+    elif key:
         try:
             run_command([PYTHON, "scripts/download_component_dataset.py", "--output", "data/component_dataset"])
             candidate = DATA / "component_dataset" / "data.yaml"
@@ -107,7 +111,7 @@ def train_electronics(report: dict) -> None:
         data_file,
         MODELS / "components.pt",
         "electronics",
-        epochs=30,
+        epochs=60,
         segmentation=False,
     )
     report["models"].append({
@@ -123,7 +127,13 @@ def train_iot(report: dict) -> None:
     model_path: Path | None = None
     dataset_name = ""
 
-    if key:
+    cached_iot = DATA / "iot_roboflow" / "data.yaml"
+    if cached_iot.is_file():
+        data_file = cached_iot
+        model_path = MODELS / "iot_components.pt"
+        dataset_name = "Roboflow IoT_Dataset"
+        print(f"Reusing cached IoT dataset: {data_file}", flush=True)
+    elif key:
         try:
             run_command([PYTHON, "scripts/download_roboflow_dataset.py", "--dataset", "iot"])
             candidate = DATA / "iot_roboflow" / "data.yaml"
@@ -169,7 +179,7 @@ def train_iot(report: dict) -> None:
         data_file,
         model_path,
         "iot",
-        epochs=40 if dataset_name == "Roboflow IoT_Dataset" else 20,
+        epochs=60 if dataset_name == "Roboflow IoT_Dataset" else 40,
         segmentation=False,
     )
     report["models"].append({
@@ -213,12 +223,14 @@ def train_resistor_colors(report: dict) -> None:
 
     # Model A: instance segmentation of individual resistor color bands.
     try:
-        run_command([
-            PYTHON, "scripts/download_roboflow_dataset.py",
-            "--dataset", "resistor-color-bands",
-        ])
         raw = DATA / "resistor_color_bands"
         data_file = dataset_yaml(raw)
+        if data_file is None:
+            run_command([
+                PYTHON, "scripts/download_roboflow_dataset.py",
+                "--dataset", "resistor-color-bands",
+            ])
+            data_file = dataset_yaml(raw)
         if data_file is None or not has_segmentation_polygons(raw):
             raise RuntimeError("No valid YOLO segmentation polygon annotations were found.")
 
@@ -226,7 +238,7 @@ def train_resistor_colors(report: dict) -> None:
             data_file,
             MODELS / "resistor_seg.pt",
             "resistor-color-bands",
-            epochs=12,
+            epochs=30,
             segmentation=True,
         )
         report["models"].append({
@@ -243,12 +255,13 @@ def train_resistor_colors(report: dict) -> None:
     # It has a different label schema from individual band-color polygons, so it
     # must not overwrite models/resistor_seg.pt.
     try:
-        run_command([
-            PYTHON, "scripts/download_roboflow_dataset.py",
-            "--dataset", "resistor-segmentation",
-        ])
         raw = DATA / "resistor_value_segmentation"
         converted = DATA / "resistor_value_seg_yolo"
+        if dataset_yaml(raw) is None:
+            run_command([
+                PYTHON, "scripts/download_roboflow_dataset.py",
+                "--dataset", "resistor-segmentation",
+            ])
         run_command([
             PYTHON, "scripts/prepare_resistor_segmentation_yolo.py",
             "--input", str(raw), "--output", str(converted), "--background-value", "0",
