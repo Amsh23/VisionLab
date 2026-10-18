@@ -79,21 +79,9 @@ Open **Electronic Component Analyzer** from the sidebar.
 
 - Select **Webcam** to start the browser's live camera preview.
 - Allow camera access and select **CatCam** in the browser/device picker if prompted. If the wrong camera starts, change the camera in the browser's site-permission settings and restart the preview.
-- Click **Capture Current Frame** to analyze the latest frame from the live feed. The preview is live; component inference runs when you capture a frame.
+- Click **Capture & Detect Components** to capture the latest live frame and automatically run component detection.
 - The live connection uses WebRTC and STUN for network traversal. Some networks or firewalls may still block WebRTC; if the preview does not connect, try another network.
 - Or select **Use shared image** to analyze the image already loaded in the sidebar.
-### Direct local CatCam with OpenCV
-
-For a true local webcam feed using `cv2.VideoCapture()` (without browser/WebRTC streaming), run this on the same Windows PC where CatCam is available:
-
-```powershell
-python -m pip install opencv-python
-python local_catcam.py --list
-python local_catcam.py --camera 0
-```
-
-Replace `0` with the CatCam index shown by `--list`. Press **Q** or **Esc** to close the preview; press **S** to save the current camera frame in `captures/`. This direct OpenCV window is a local preview utility; the hosted Streamlit app cannot access the PC's camera through `cv2.VideoCapture(0)` because that code runs on the cloud server.
-
 ### Detect components in the full image
 
 The analyzer calls two hosted Roboflow object-detection endpoints directly over HTTPS, validates and normalizes their response payloads, and merges overlapping same-class predictions. This keeps the Streamlit runtime lightweight and avoids installing conflicting GUI and headless OpenCV wheels. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
@@ -209,7 +197,7 @@ The main Electronic Component Analyzer uses the two hosted Roboflow models by de
 - `scripts/download_iotkits_dataset.py`: download the IoTKITs embedded-board dataset from Mendeley Data.
 - `scripts/prepare_iotkits_yolo.py`: convert supported IoTKITs JSON/polygon annotations to YOLO format.
 - `scripts/train_components_yolo.py`: train a local YOLO detector and copy its best weights to a configurable destination.
-- `resistor_analyzer.py`: webcam capture, whole-scene detection, and resistor color-band value estimation.
+- `resistor_analyzer.py`: live browser webcam capture, whole-scene component detection, and resistor color-band value estimation.
 
 A detector finding a resistor does **not** automatically measure its resistance. The crop reader estimates resistance from visible 4-band or 5-band colors using an adaptive Lab-contrast scan and HSV color estimates. Automatic colors can be reviewed/corrected individually; the results display each band's digit, multiplier or tolerance, the resistance formula, expected range, and a short component-use explanation. Use a tight crop, even lighting, and no direct flash glare. Because similar colors can still be confused under real camera conditions, check important resistor values with a multimeter.
 
