@@ -6,3 +6,4 @@ pillow
 scikit-learn
 pandas
 requests
+streamlit-webrtc
