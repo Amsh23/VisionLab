@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import streamlit as st
 from PIL import Image
+from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 
 from hosted_inference import request_roboflow_detections, safe_error_summary
 
@@ -509,25 +510,65 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     selected_token = source_token
 
     if image_source == "Webcam":
-        # Use Streamlit's native browser camera capture instead of WebRTC.
-        # This avoids server-side ICE/STUN/TURN connection failures and does not
-        # resize, recolor, or otherwise alter the captured image before analysis.
-        camera_photo = st.camera_input(
-            "Select your webcam in the browser/OS camera settings, then take a photo",
-            key="electronic_component_camera_capture",
+        class LiveComponentCamera(VideoProcessorBase):
+            def __init__(self):
+                self.latest_frame = None
+
+            def recv(self, frame):
+                frame_rgb = frame.to_ndarray(format="rgb24")
+                self.latest_frame = frame_rgb.copy()
+                return frame
+
+        st.caption(
+            "Live camera preview. Choose CatCam in the browser camera permission/device picker if prompted, "
+            "then click Capture Current Frame to run component analysis on the live feed."
         )
-        if camera_photo is None:
-            st.caption("Choose the CatCam webcam in your browser's camera settings if needed, then capture a frame.")
+        camera_ctx = webrtc_streamer(
+            key="visionlab_live_catcam",
+            mode=WebRtcMode.SENDRECV,
+            video_processor_factory=LiveComponentCamera,
+            media_stream_constraints={"video": True, "audio": False},
+            rtc_configuration={
+                "iceServers": [
+                    {"urls": ["stun:stun.l.google.com:19302"]},
+                    {"urls": ["stun:stun1.l.google.com:19302"]},
+                ]
+            },
+            async_processing=True,
+        )
+        capture_col, clear_col = st.columns(2)
+        capture_clicked = capture_col.button(
+            "Capture Current Frame",
+            type="primary",
+            key="capture_live_component_frame",
+            use_container_width=True,
+        )
+        clear_clicked = clear_col.button(
+            "Clear Captured Frame",
+            key="clear_live_component_frame",
+            use_container_width=True,
+        )
+        if clear_clicked:
+            st.session_state.pop("visionlab_live_captured_frame", None)
+            st.session_state.pop("visionlab_live_captured_token", None)
+        if capture_clicked:
+            processor = camera_ctx.video_processor
+            latest_frame = getattr(processor, "latest_frame", None) if processor else None
+            if latest_frame is None:
+                st.warning("The live camera has not delivered a frame yet. Wait for the preview, then try again.")
+                return
+            captured = np.asarray(latest_frame, dtype=np.uint8).copy()
+            st.session_state["visionlab_live_captured_frame"] = captured
+            st.session_state["visionlab_live_captured_token"] = hashlib.sha256(captured.tobytes()).hexdigest()[:20]
+
+        image_rgb = st.session_state.get("visionlab_live_captured_frame")
+        if image_rgb is None:
+            st.info("Start the webcam preview, then click Capture Current Frame. The live feed itself is not analyzed until you capture a frame.")
             return
-        try:
-            image_rgb = np.asarray(Image.open(camera_photo).convert("RGB"))
-            selected_token = hashlib.sha256(camera_photo.getvalue()).hexdigest()[:20]
-        except Exception as error:
-            st.error(f"Could not read the captured webcam image: {type(error).__name__}: {error}")
-            return
+        selected_token = str(st.session_state.get("visionlab_live_captured_token", "live-frame"))
 
     if image_rgb is None:
-        st.warning("Upload an image in the sidebar, or select the webcam option and take a photo.")
+        st.warning("Upload an image in the sidebar, or select Webcam and capture a frame from the live feed.")
         return
     if image_rgb.ndim != 3 or image_rgb.shape[2] != 3:
         st.error("The selected image must decode to a three-channel RGB image.")
