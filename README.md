@@ -75,12 +75,12 @@ The Streamlit runtime uses hosted Roboflow inference by default and keeps local 
 
 Open **Electronic Component Analyzer** from the sidebar.
 
-### Webcam or uploaded image
+### Live webcam or uploaded image
 
-- Select **Webcam** in the analyzer to open the browser's native camera capture.
-- If needed, choose **CatCam** as the camera in your browser/Windows camera settings, allow permission, and capture a frame.
-- This uses the captured image as-is for analysis: VisionLab does not intentionally recolor or resize it in the webcam input step. The analysis pipeline may create annotated output later.
-- This is a still-frame capture, not continuous live-video processing. It does not use WebRTC, so there is no STUN/TURN setup or WebRTC connection timeout.
+- Select **Webcam** to start the browser's live camera preview.
+- Allow camera access and select **CatCam** in the browser/device picker if prompted. If the wrong camera starts, change the camera in the browser's site-permission settings and restart the preview.
+- Click **Capture Current Frame** to analyze the latest frame from the live feed. The preview is live; component inference runs when you capture a frame.
+- The live connection uses WebRTC and STUN for network traversal. Some networks or firewalls may still block WebRTC; if the preview does not connect, try another network.
 - Or select **Use shared image** to analyze the image already loaded in the sidebar.
 ### Detect components in the full image
 
