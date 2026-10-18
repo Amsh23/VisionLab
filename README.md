@@ -75,22 +75,13 @@ The Streamlit runtime uses hosted Roboflow inference by default and keeps local 
 
 Open **Electronic Component Analyzer** from the sidebar.
 
-### Live CatCam webcam or uploaded image
+### Webcam or uploaded image
 
-- Select **Live webcam** in the analyzer, allow camera access, and press **START** in the WebRTC panel.
-- In the camera selector, choose **CatCam** (the Windows virtual camera) to use your phone's feed. Keep CatCam running on the PC and make sure its preview works in the Windows Camera app first.
-- The live preview is continuous. Click **Analyze Current Webcam Frame** to send the latest available frame through the component detector; inference is triggered on demand rather than on every frame to avoid wasting hosted API requests.
-- Frames are decoded as RGB before OpenCV processing to avoid an accidental RGB/BGR swap. Actual color accuracy still depends on CatCam's camera processing, lighting, exposure, and white balance.
-- If the connection times out, VisionLab uses public Google STUN servers by default. STUN does not bypass every firewall or restrictive network. For networks that require a TURN relay, add these optional values under Streamlit Community Cloud **App settings → Secrets**:
-
-```toml
-TURN_SERVER_URL = "turn:your-turn-server.example:3478"
-TURN_USERNAME = "your-turn-username"
-TURN_CREDENTIAL = "your-turn-credential"
-```
-
-Use credentials from a TURN provider you trust; do not commit real credentials to GitHub. If the preview still will not connect, test on another network and check the browser's camera permission. Or select **Use shared image** to analyze a still image instead.
-
+- Select **Webcam** in the analyzer to open the browser's native camera capture.
+- If needed, choose **CatCam** as the camera in your browser/Windows camera settings, allow permission, and capture a frame.
+- This uses the captured image as-is for analysis: VisionLab does not intentionally recolor or resize it in the webcam input step. The analysis pipeline may create annotated output later.
+- This is a still-frame capture, not continuous live-video processing. It does not use WebRTC, so there is no STUN/TURN setup or WebRTC connection timeout.
+- Or select **Use shared image** to analyze the image already loaded in the sidebar.
 ### Detect components in the full image
 
 The analyzer calls two hosted Roboflow object-detection endpoints directly over HTTPS, validates and normalizes their response payloads, and merges overlapping same-class predictions. This keeps the Streamlit runtime lightweight and avoids installing conflicting GUI and headless OpenCV wheels. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
