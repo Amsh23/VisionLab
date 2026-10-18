@@ -75,11 +75,21 @@ The Streamlit runtime uses hosted Roboflow inference by default and keeps local 
 
 Open **Electronic Component Analyzer** from the sidebar.
 
-### Webcam or uploaded image
+### Live CatCam webcam or uploaded image
 
-- Select **Take a webcam photo** to open your browser's camera capture widget, point it at components on your workbench, and take a photo.
-- Or select **Use shared image** to analyze the image already loaded in the sidebar.
-- The camera widget captures a still image for analysis; it does not continuously process live video.
+- Select **Live webcam** in the analyzer, allow camera access, and press **START** in the WebRTC panel.
+- In the camera selector, choose **CatCam** (the Windows virtual camera) to use your phone's feed. Keep CatCam running on the PC and make sure its preview works in the Windows Camera app first.
+- The live preview is continuous. Click **Analyze Current Webcam Frame** to send the latest available frame through the component detector; inference is triggered on demand rather than on every frame to avoid wasting hosted API requests.
+- Frames are decoded as RGB before OpenCV processing to avoid an accidental RGB/BGR swap. Actual color accuracy still depends on CatCam's camera processing, lighting, exposure, and white balance.
+- If the connection times out, VisionLab uses public Google STUN servers by default. STUN does not bypass every firewall or restrictive network. For networks that require a TURN relay, add these optional values under Streamlit Community Cloud **App settings → Secrets**:
+
+```toml
+TURN_SERVER_URL = "turn:your-turn-server.example:3478"
+TURN_USERNAME = "your-turn-username"
+TURN_CREDENTIAL = "your-turn-credential"
+```
+
+Use credentials from a TURN provider you trust; do not commit real credentials to GitHub. If the preview still will not connect, test on another network and check the browser's camera permission. Or select **Use shared image** to analyze a still image instead.
 
 ### Detect components in the full image
 
