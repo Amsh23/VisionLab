@@ -496,8 +496,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         "and the standards-based lookup table calculates resistance and tolerance."
     )
     st.info(
-        "Use the shared uploader or start the live webcam. The camera preview runs continuously; "
-        "select Analyze Current Frame to run the component detector on what the camera sees. "
+        "Use the shared uploader or start the live webcam. The preview runs continuously; "
+        "Capture & Detect Components analyzes the current camera frame. "
         "For resistor values, use the close-up crop and verify important readings with a multimeter."
     )
 
