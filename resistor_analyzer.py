@@ -496,8 +496,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
         "and the standards-based lookup table calculates resistance and tolerance."
     )
     st.info(
-        "Use the shared uploader or start the live webcam. The preview runs continuously; "
-        "Capture & Detect Components analyzes the current camera frame. "        "For resistor values, use the close-up crop and verify important readings with a multimeter."
+        "Use an uploaded image for still-image analysis, or select Webcam for continuous live component detection. "
+        "For resistor values, use the close-up crop and verify important readings with a multimeter."
     )
 
     image_source = st.radio(
@@ -551,10 +551,6 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             st.warning(f"Live detection issue: {processor.error}")
         return
 
-    if image_rgb is None:
-            st.info("Start the webcam preview, then click Capture & Detect Components. The selected frame will be analyzed automatically.")
-            return
-        selected_token = str(st.session_state.get("visionlab_live_captured_token", "live-frame"))
 
     if image_rgb is None:
         st.warning("Upload an image in the sidebar, or select Webcam and capture a frame from the live feed.")
