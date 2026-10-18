@@ -70,6 +70,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for file in \
+            models/base/*.pt \
             models/components.pt \
             models/iot_components.pt \
             models/iot_boards.pt \
