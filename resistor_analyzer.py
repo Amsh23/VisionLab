@@ -510,9 +510,9 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
 
     if image_source == "Live webcam":
         try:
-            from streamlit_webrtc import VideoTransformerBase, WebRtcMode, webrtc_streamer
+            from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 
-            class LiveComponentCamera(VideoTransformerBase):
+            class LiveComponentCamera(VideoProcessorBase):
                 def __init__(self):
                     self.latest_frame = None
 
@@ -524,7 +524,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             camera_ctx = webrtc_streamer(
                 key="electronic-component-live-camera",
                 mode=WebRtcMode.SENDRECV,
-                video_transformer_factory=LiveComponentCamera,
+                video_processor_factory=LiveComponentCamera,
                 media_stream_constraints={"video": True, "audio": False},
                 async_processing=True,
             )
@@ -537,7 +537,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
                 key="electronics_analyze_live_frame",
                 width="stretch",
             ):
-                transformer = camera_ctx.video_transformer
+                transformer = camera_ctx.video_processor
                 if transformer is None or transformer.latest_frame is None:
                     st.warning("No webcam frame is available yet. Wait for the preview, then try again.")
                     return
