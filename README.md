@@ -82,6 +82,18 @@ Open **Electronic Component Analyzer** from the sidebar.
 - Click **Capture Current Frame** to analyze the latest frame from the live feed. The preview is live; component inference runs when you capture a frame.
 - The live connection uses WebRTC and STUN for network traversal. Some networks or firewalls may still block WebRTC; if the preview does not connect, try another network.
 - Or select **Use shared image** to analyze the image already loaded in the sidebar.
+### Direct local CatCam with OpenCV
+
+For a true local webcam feed using `cv2.VideoCapture()` (without browser/WebRTC streaming), run this on the same Windows PC where CatCam is available:
+
+```powershell
+python -m pip install opencv-python
+python local_catcam.py --list
+python local_catcam.py --camera 0
+```
+
+Replace `0` with the CatCam index shown by `--list`. Press **Q** or **Esc** to close the preview; press **S** to save the current camera frame in `captures/`. This direct OpenCV window is a local preview utility; the hosted Streamlit app cannot access the PC's camera through `cv2.VideoCapture(0)` because that code runs on the cloud server.
+
 ### Detect components in the full image
 
 The analyzer calls two hosted Roboflow object-detection endpoints directly over HTTPS, validates and normalizes their response payloads, and merges overlapping same-class predictions. This keeps the Streamlit runtime lightweight and avoids installing conflicting GUI and headless OpenCV wheels. Experimental local checkpoints are opt-in until they pass validation on real, independently captured images:
