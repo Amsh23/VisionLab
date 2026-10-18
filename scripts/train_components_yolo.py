@@ -49,8 +49,31 @@ def main() -> None:
     print(f"Dataset YAML: {data_path}")
     print(f"Initial model: {args.model}")
     print(f"Training for {args.epochs} epochs at image size {args.imgsz}.")
-    print("Training may download the small initial YOLO checkpoint if it is not cached locally.")
-    model = YOLO(args.model)
+
+    # Keep pretrained starter checkpoints in models/base so subsequent local runs
+    # can reuse them without fetching them again from Ultralytics.
+    base_dir = Path("models/base")
+    base_dir.mkdir(parents=True, exist_ok=True)
+    requested_model = Path(args.model)
+    cached_model = base_dir / requested_model.name
+    if requested_model.is_file():
+        model = YOLO(str(requested_model.resolve()))
+        source_checkpoint = requested_model.resolve()
+    elif cached_model.is_file():
+        model = YOLO(str(cached_model.resolve()))
+        source_checkpoint = cached_model.resolve()
+        print(f"Using cached pretrained checkpoint: {source_checkpoint}")
+    else:
+        model = YOLO(args.model)
+        checkpoint_value = getattr(model, "ckpt_path", None)
+        source_checkpoint = Path(checkpoint_value).expanduser() if checkpoint_value else None
+        if source_checkpoint and source_checkpoint.is_file():
+            import shutil
+            shutil.copy2(source_checkpoint, cached_model)
+            print(f"Cached pretrained checkpoint: {cached_model}")
+        else:
+            print("Warning: Ultralytics did not expose the downloaded checkpoint path; it remains in its own cache.")
+
     train_options = {
         "data": str(data_path),
         "epochs": args.epochs,
