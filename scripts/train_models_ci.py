@@ -12,7 +12,6 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,36 +19,16 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 MODELS = ROOT / "models"
 PYTHON = sys.executable
-TRAIN_BUDGET_MIN = max(1, int(os.environ.get("VISIONLAB_TRAIN_BUDGET_MIN", "45")) )
-TRAIN_STARTED = time.monotonic()
-
-
-def remaining_budget_seconds() -> float:
-    return TRAIN_BUDGET_MIN * 60 - (time.monotonic() - TRAIN_STARTED)
-
-
 def run_command(arguments: list[str]) -> None:
     """Run a subprocess without copying credentials into command-line arguments."""
     printable = " ".join(str(value) for value in arguments)
     print(f"\n[VisionLab training] $ {printable}", flush=True)
-    remaining = remaining_budget_seconds()
-    if remaining <= 0:
-        raise RuntimeError(
-            f"Training time budget ({TRAIN_BUDGET_MIN} minutes) has been exhausted."
-        )
-    try:
-        completed = subprocess.run(
-            arguments,
-            cwd=ROOT,
-            env=os.environ.copy(),
-            check=False,
-            timeout=remaining,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError(
-            f"Training command exceeded the remaining time budget "
-            f"({TRAIN_BUDGET_MIN} minutes)."
-        ) from error
+    completed = subprocess.run(
+        arguments,
+        cwd=ROOT,
+        env=os.environ.copy(),
+        check=False,
+    )
     if completed.returncode:
         raise RuntimeError(f"Command failed with exit code {completed.returncode}: {arguments[1]}")
 
@@ -101,8 +80,8 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
         "--data", str(data_file),
         "--model", "yolo11n-seg.pt" if segmentation else "yolo11n.pt",
         "--epochs", str(epochs),
-        "--imgsz", "416",
-        "--fraction", "0.25",
+        "--imgsz", "320",
+        "--fraction", "0.15",
         "--workers", "2",
         "--batch", "4" if segmentation else "8",
         "--device", "cpu",
@@ -137,7 +116,7 @@ def train_electronics(report: dict) -> None:
         data_file,
         MODELS / "components.pt",
         "electronics",
-        epochs=12,
+        epochs=5,
         segmentation=False,
     )
     report["models"].append({
@@ -205,7 +184,7 @@ def train_iot(report: dict) -> None:
         data_file,
         model_path,
         "iot",
-        epochs=12 if dataset_name == "Roboflow IoT_Dataset" else 10,
+        epochs=5,
         segmentation=False,
     )
     report["models"].append({
@@ -335,15 +314,8 @@ def main() -> None:
     selected = list(tasks) if task == "all" else [task]
     for task_name in selected:
         try:
-            remaining = remaining_budget_seconds()
-            if remaining <= 0:
-                report["warnings"].append(
-                    f"Skipped {task_name}: the {TRAIN_BUDGET_MIN}-minute training budget was exhausted."
-                )
-                break
             print(
-                f"\n========== Training task: {task_name} "
-                f"(about {remaining / 60:.1f} minutes budget remaining) ==========",
+                f"\n========== Training task: {task_name} ==========",
                 flush=True,
             )
             tasks[task_name](report)
