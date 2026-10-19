@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,13 +20,36 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 MODELS = ROOT / "models"
 PYTHON = sys.executable
+TRAIN_BUDGET_MIN = max(1, int(os.environ.get("VISIONLAB_TRAIN_BUDGET_MIN", "150")))
+TRAIN_STARTED = time.monotonic()
+
+
+def remaining_budget_seconds() -> float:
+    return TRAIN_BUDGET_MIN * 60 - (time.monotonic() - TRAIN_STARTED)
 
 
 def run_command(arguments: list[str]) -> None:
     """Run a subprocess without copying credentials into command-line arguments."""
     printable = " ".join(str(value) for value in arguments)
     print(f"\n[VisionLab training] $ {printable}", flush=True)
-    completed = subprocess.run(arguments, cwd=ROOT, env=os.environ.copy(), check=False)
+    remaining = remaining_budget_seconds()
+    if remaining <= 0:
+        raise RuntimeError(
+            f"Training time budget ({TRAIN_BUDGET_MIN} minutes) has been exhausted."
+        )
+    try:
+        completed = subprocess.run(
+            arguments,
+            cwd=ROOT,
+            env=os.environ.copy(),
+            check=False,
+            timeout=remaining,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"Training command exceeded the remaining time budget "
+            f"({TRAIN_BUDGET_MIN} minutes)."
+        ) from error
     if completed.returncode:
         raise RuntimeError(f"Command failed with exit code {completed.returncode}: {arguments[1]}")
 
@@ -309,7 +333,17 @@ def main() -> None:
     selected = list(tasks) if task == "all" else [task]
     for task_name in selected:
         try:
-            print(f"\n========== Training task: {task_name} ==========", flush=True)
+            remaining = remaining_budget_seconds()
+            if remaining <= 0:
+                report["warnings"].append(
+                    f"Skipped {task_name}: the {TRAIN_BUDGET_MIN}-minute training budget was exhausted."
+                )
+                break
+            print(
+                f"\n========== Training task: {task_name} "
+                f"(about {remaining / 60:.1f} minutes budget remaining) ==========",
+                flush=True,
+            )
             tasks[task_name](report)
         except Exception as error:
             report["warnings"].append(f"{task_name}: {type(error).__name__}: {error}")

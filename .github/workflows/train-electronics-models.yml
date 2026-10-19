@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: visionlab-model-training-v3
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   train-and-publish:
@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 180
     env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
+      VISIONLAB_TRAIN_BUDGET_MIN: "150"
+      # VISIONLAB_DETECT_MODEL: yolo11n.pt
     steps:
       - uses: actions/checkout@v7
         with:

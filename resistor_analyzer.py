@@ -510,92 +510,18 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     selected_token = source_token
 
     if image_source == "Webcam":
-        model_root = Path(__file__).resolve().parent / "models"
-        live_model_configs = [
-            (model_root / "components.pt", "Electronics"),
-            (model_root / "iot_components.pt", "IoT Components"),
-            (model_root / "iot_boards.pt", "IoT Boards"),
-        ]
-        live_model_configs = [
-            (path, label) for path, label in live_model_configs if path.is_file()
-        ]
+        from live_webcam import render_live_webcam_detection
 
-        if importlib.util.find_spec("ultralytics") is None:
-            st.error("Ultralytics is not installed. Run: python -m pip install ultralytics")
-            return
-        if not live_model_configs:
-            st.error(
-                "No local detector checkpoints were found in models/. "
-                "Run the GitHub Actions training workflow or add a trained .pt checkpoint."
-            )
-            return
-
-        class LiveComponentDetector(VideoProcessorBase):
-            def __init__(self):
-                self.models = [
-                    (load_local_yolo_model(str(path)), label)
-                    for path, label in live_model_configs
-                ]
-                self.error = None
-
-            def recv(self, frame):
-                try:
-                    frame_bgr = frame.to_ndarray(format="bgr24")
-                    annotated_bgr = frame_bgr.copy()
-                    palette = [(30, 200, 80), (230, 140, 35), (210, 70, 210)]
-                    for model_index, (model, model_label) in enumerate(self.models):
-                        prediction = model.predict(
-                            source=frame_bgr,
-                            conf=0.25,
-                            imgsz=640,
-                            verbose=False,
-                        )[0]
-                        boxes = prediction.boxes
-                        if boxes is None:
-                            continue
-                        color = palette[model_index % len(palette)]
-                        names = prediction.names
-                        for box in boxes:
-                            class_id = int(box.cls[0].item())
-                            class_name = (
-                                names.get(class_id, str(class_id))
-                                if isinstance(names, dict)
-                                else names[class_id]
-                            )
-                            confidence = float(box.conf[0].item())
-                            x1, y1, x2, y2 = [
-                                int(round(value))
-                                for value in box.xyxy[0].detach().cpu().numpy().tolist()
-                            ]
-                            cv2.rectangle(annotated_bgr, (x1, y1), (x2, y2), color, 2)
-                            label = f"{model_label}: {class_name} {confidence:.0%}"
-                            text_y = max(20, y1 - 7)
-                            cv2.putText(
-                                annotated_bgr, label, (x1, text_y),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 2, cv2.LINE_AA,
-                            )
-                    return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
-                except Exception as error:
-                    self.error = f"{type(error).__name__}: {error}"
-                    return frame
-
-        model_labels = ", ".join(label for _, label in live_model_configs)
-        st.caption(
-            "Continuous live detection using every local checkpoint found: "
-            f"{model_labels}. Predictions refresh automatically on the video stream."
+        try:
+            api_key = str(st.secrets["ROBOFLOW_API_KEY"]).strip()
+        except Exception:
+            api_key = ""
+        render_live_webcam_detection(
+            Path(__file__).resolve().parent / "models",
+            load_local_yolo_model,
+            api_key,
         )
-        camera_ctx = webrtc_streamer(
-            key="visionlab_live_component_detection",
-            mode=WebRtcMode.SENDRECV,
-            video_processor_factory=LiveComponentDetector,
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
-        processor = camera_ctx.video_processor
-        if processor is not None and getattr(processor, "error", None):
-            st.warning(f"Live detection issue: {processor.error}")
         return
-
 
     if image_rgb is None:
         st.warning("Upload an image in the sidebar, or select Webcam and capture a frame from the live feed.")
