@@ -26,7 +26,7 @@ jobs:
   train-and-publish:
     name: Download datasets, train and publish models
     runs-on: ubuntu-24.04
-      env:
+    env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
       # VISIONLAB_DETECT_MODEL: yolo11n.pt
     steps:
