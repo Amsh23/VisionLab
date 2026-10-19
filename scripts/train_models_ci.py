@@ -80,10 +80,10 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
         "--data", str(data_file),
         "--model", "yolo11n-seg.pt" if segmentation else "yolo11n.pt",
         "--epochs", str(epochs),
-        "--imgsz", "320",
+        "--imgsz", "256",
         "--fraction", "0.15",
-        "--workers", "2",
-        "--batch", "4" if segmentation else "8",
+        "--workers", "4",
+        "--batch", "4" if segmentation else "16",
         "--device", "cpu",
         "--project", f"runs/{name}",
         "--name", "github_actions",
@@ -116,7 +116,7 @@ def train_electronics(report: dict) -> None:
         data_file,
         MODELS / "components.pt",
         "electronics",
-        epochs=5,
+        epochs=3,
         segmentation=False,
     )
     report["models"].append({
