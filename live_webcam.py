@@ -32,6 +32,7 @@ def render_live_webcam_detection(
     # Keep live CPU inference responsive by using one detector per session.
     # Prefer the general electronics model, then fall back to an IoT checkpoint.
     preferred_checkpoints = [
+        (model_root / "best.pt", "Colab Electronics + IoT"),
         (model_root / "components.pt", "Electronics"),
         (model_root / "iot_components.pt", "IoT Components"),
         (model_root / "iot_boards.pt", "IoT Boards"),

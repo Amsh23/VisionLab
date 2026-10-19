@@ -30,3 +30,6 @@ runs/
 models/*.pt
 models/*.joblib
 models/*.metrics.json
+
+# Optional combined Electronics + IoT checkpoint used by live webcam detection
+!models/best.pt

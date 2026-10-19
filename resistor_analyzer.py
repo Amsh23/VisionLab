@@ -551,6 +551,7 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
     # Local checkpoints are populated by the repository's training workflow.
     model_root = Path(__file__).resolve().parent / "models"
     candidate_local_models = [
+        {"path": model_root / "best.pt", "label": "Colab Electronics + IoT Model"},
         {"path": model_root / "components.pt", "label": "Trained Electronics Model"},
         {"path": model_root / "iot_components.pt", "label": "Trained IoT Model"},
         {"path": model_root / "iot_boards.pt", "label": "Trained IoT Board Model"},
@@ -561,8 +562,8 @@ def render_resistor_analyzer(image_rgb: np.ndarray | None, source_token: str = "
             "Include experimental local checkpoints",
             value=False,
             help=(
-                "Off by default: the early CI-trained local checkpoint has not yet passed "
-                "real-image validation. The app uses the published hosted detectors instead."
+                "Off by default for still-image analysis. Local checkpoints are experimental "
+                "and should be evaluated on independent real photos before regular use."
             ),
             key="include_experimental_local_checkpoints",
         )

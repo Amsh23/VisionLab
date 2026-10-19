@@ -60,7 +60,15 @@ These screenshots document manual tests on the currently deployed app. They are 
 
 **Project-specific contribution:** integrating component detection with an interactive resistor-reading workflow and understandable code explanations. The hosted component detector is a third-party Roboflow model; the project does not claim to have trained that hosted model from scratch. The default automatic color reader remains an OpenCV heuristic; an optional local YOLO segmentation model can be trained from resistor-band mask data and selected in the UI. Any decoded value should be checked with a multimeter when accuracy matters.
 
-**Model training:** the repository includes repeatable download/prepare/train scripts for a general electronic-components dataset and a separate IoT development-board dataset. See [DATASETS.md](DATASETS.md). Large raw image archives and trained weights are kept out of ordinary Git history by default.
+**Model training:** the repository includes repeatable download/prepare/train scripts for a general electronic-components dataset and a separate IoT development-board dataset. See [DATASETS.md](DATASETS.md). Raw datasets are kept out of Git. Checkpoints are ignored by default, with explicit exceptions for the app's optional `models/best.pt` Colab checkpoint and the existing tracked model files.
+
+## Train the combined Electronics + IoT detector in Google Colab
+
+Open the [Google Colab training notebook](https://colab.research.google.com/github/Amsh23/VisionLab/blob/main/notebooks/train_electronics_iot_colab.ipynb).
+
+The notebook downloads the general electronics dataset and the IoT dataset from Roboflow, merges matching class names, converts polygon-style YOLO labels to bounding boxes, and trains a small YOLO11n baseline. The quick preset uses 3 epochs, a 320-pixel image size, and 25% of the training split; it is intended as a fast baseline, not a validated high-accuracy model.
+
+The notebook downloads the resulting checkpoint as `best.pt`. To enable it in the live webcam, place that file at `models/best.pt` and commit it to the repository. The webcam loader checks `models/best.pt` first and falls back to `models/components.pt` if the Colab checkpoint is not present. Always evaluate a new checkpoint on independent real photos before relying on its predictions.
 
 ## Run locally
 
@@ -69,7 +77,7 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The Streamlit runtime uses hosted Roboflow inference by default and keeps local YOLO training dependencies out of the web install to avoid pulling large PyTorch/CUDA packages. For local YOLO checkpoints or training scripts, create a separate environment and install `requirements-training.txt` instead.
+The Streamlit runtime installs the dependencies listed in `requirements.txt`. Live webcam inference prefers `models/best.pt`, then `models/components.pt`, then the existing IoT checkpoints. If no local checkpoint can be loaded, it can fall back to hosted Roboflow inference when `ROBOFLOW_API_KEY` is configured. For dataset preparation and model training, use a separate environment with `requirements-training.txt`.
 
 ## Electronic Component Analyzer
 
