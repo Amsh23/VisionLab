@@ -84,6 +84,10 @@ def render_live_webcam_detection(
             self.models = []
             for path, label in checkpoint_paths:
                 self.models.append((load_local_yolo_model(str(path)), label))
+            # Run local YOLO on alternate frames and reuse boxes in between.
+            # This nearly halves CPU inference work while keeping the preview live.
+            self.frame_index = 0
+            self.cached_local_boxes = None
             self.last_hosted_request = 0.0
             self.hosted_detections = []
             self.hosted_error = ""
@@ -110,31 +114,41 @@ def render_live_webcam_detection(
                 palette = [(30, 200, 80), (230, 140, 35), (210, 70, 210)]
 
                 if self.models:
-                    for model_index, (model, model_label) in enumerate(self.models):
-                        result = model.predict(
-                            source=image,
-                            conf=float(confidence),
-                            imgsz=320,
-                            verbose=False,
-                        )[0]
-                        boxes = result.boxes
-                        if boxes is None:
-                            continue
-                        names = result.names
-                        color = palette[model_index % len(palette)]
-                        for box in boxes:
-                            class_id = int(box.cls[0].item())
-                            class_name = (
-                                names.get(class_id, str(class_id))
-                                if isinstance(names, dict)
-                                else names[class_id]
-                            )
-                            score = float(box.conf[0].item())
-                            x1, y1, x2, y2 = box.xyxy[0].detach().cpu().numpy().tolist()
-                            self._draw_box(
-                                annotated, x1, y1, x2, y2,
-                                f"{model_label}: {class_name}", score, color,
-                            )
+                    self.frame_index += 1
+                    # Infer on the first frame, then every other frame.
+                    if self.cached_local_boxes is None or self.frame_index % 2 == 1:
+                        cached = []
+                        for model_index, (model, model_label) in enumerate(self.models):
+                            result = model.predict(
+                                source=image,
+                                conf=float(confidence),
+                                imgsz=320,
+                                max_det=30,
+                                iou=0.5,
+                                verbose=False,
+                            )[0]
+                            boxes = result.boxes
+                            if boxes is None:
+                                continue
+                            names = result.names
+                            color = palette[model_index % len(palette)]
+                            for box in boxes:
+                                class_id = int(box.cls[0].item())
+                                class_name = (
+                                    names.get(class_id, str(class_id))
+                                    if isinstance(names, dict)
+                                    else names[class_id]
+                                )
+                                score = float(box.conf[0].item())
+                                x1, y1, x2, y2 = box.xyxy[0].detach().cpu().numpy().tolist()
+                                cached.append((
+                                    x1, y1, x2, y2,
+                                    f"{model_label}: {class_name}", score, color,
+                                ))
+                        self.cached_local_boxes = cached
+
+                    for x1, y1, x2, y2, label, score, color in self.cached_local_boxes:
+                        self._draw_box(annotated, x1, y1, x2, y2, label, score, color)
                 else:
                     now = time.monotonic()
                     if now - self.last_hosted_request >= 1.5:
