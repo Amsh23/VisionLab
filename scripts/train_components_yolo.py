@@ -8,7 +8,72 @@ from pathlib import Path
 # endregion
 
 
-# region 02: YOLO Training
+# region 02: Dataset Label Cleanup
+def sanitize_detection_labels(data_file: Path) -> tuple[int, int]:
+    """Drop malformed or segmentation-polygon rows before detection-only training.
+
+    YOLO detection rows must contain exactly five numeric fields:
+    class_id, x_center, y_center, width, height. Mixed polygon/detection
+    annotation files are normalized by keeping valid detection rows only.
+    """
+    import math
+
+    scanned = 0
+    removed = 0
+    dataset_root = data_file.parent
+    for label_file in dataset_root.rglob("*.txt"):
+        if "labels" not in {part.casefold() for part in label_file.parts}:
+            continue
+        scanned += 1
+        original = label_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        kept = []
+        for line in original:
+            parts = line.split()
+            if len(parts) != 5:
+                if line.strip():
+                    removed += 1
+                continue
+            try:
+                values = [float(value) for value in parts]
+            except ValueError:
+                removed += 1
+                continue
+            class_id, x_center, y_center, width, height = values
+            valid = (
+                all(math.isfinite(value) for value in values)
+                and class_id >= 0
+                and class_id.is_integer()
+                and 0.0 <= x_center <= 1.0
+                and 0.0 <= y_center <= 1.0
+                and 0.0 < width <= 1.0
+                and 0.0 < height <= 1.0
+            )
+            if valid:
+                kept.append(" ".join(parts))
+            else:
+                removed += 1
+        normalized = "\n".join(kept)
+        if normalized:
+            normalized += "\n"
+        if normalized != label_file.read_text(encoding="utf-8", errors="replace"):
+            label_file.write_text(normalized, encoding="utf-8")
+    print(
+        f"Detection-label cleanup: scanned {scanned} label files; "
+        f"removed {removed} malformed/polygon rows.",
+        flush=True,
+    )
+    if scanned == 0:
+        raise RuntimeError(
+            f"No YOLO label files were found beneath {dataset_root}. "
+            "Check the dataset export layout."
+        )
+    return scanned, removed
+
+
+# endregion
+
+
+# region 03: YOLO Training
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fine-tune a small Ultralytics YOLO detector on an exported electronics-components dataset."
@@ -47,6 +112,8 @@ def main() -> None:
             "Ultralytics is an optional training dependency. Install it with: "
             "python -m pip install ultralytics"
         ) from error
+
+    sanitize_detection_labels(data_path)
 
     print(f"Dataset YAML: {data_path}")
     print(f"Initial model: {args.model}")
