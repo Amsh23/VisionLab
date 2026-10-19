@@ -54,14 +54,20 @@ jobs:
           import sklearn
           import streamlit
 
-          metadata.version("opencv-python-headless")
-          try:
-              metadata.version("opencv-python")
-          except metadata.PackageNotFoundError:
-              pass
-          else:
-              raise SystemExit("Runtime must not install opencv-python alongside opencv-python-headless.")
-          print("Runtime imports succeeded; headless OpenCV is the only OpenCV wheel installed.")
+          installed_opencv = []
+          for distribution in ("opencv-python", "opencv-python-headless"):
+              try:
+                  metadata.version(distribution)
+              except metadata.PackageNotFoundError:
+                  continue
+              installed_opencv.append(distribution)
+          if len(installed_opencv) != 1:
+              raise SystemExit(
+                  "Runtime must install exactly one OpenCV wheel; found: "
+                  + ", ".join(installed_opencv)
+              )
+          metadata.version("ultralytics")
+          print(f"Runtime imports succeeded with {installed_opencv[0]} and Ultralytics.")
           PY
 
       - name: Smoke-test every Streamlit page
