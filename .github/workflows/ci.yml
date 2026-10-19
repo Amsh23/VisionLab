@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +38,7 @@ jobs:
           /tmp/actionlint .github/workflows/*.yml
 
       - name: Check Python syntax
-        run: python -m compileall -q app.py resistor_analyzer.py scripts tests
+        run: python -m compileall -q app.py resistor_analyzer.py live_webcam.py hosted_inference.py scripts tests
 
       - name: Check libraries
         run: |
