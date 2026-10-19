@@ -29,12 +29,16 @@ def render_live_webcam_detection(
 ) -> None:
     """Render a real-time webcam with local model inference and hosted fallback."""
     model_root = Path(model_root)
-    checkpoint_paths = [
+    # Keep live CPU inference responsive by using one detector per session.
+    # Prefer the general electronics model, then fall back to an IoT checkpoint.
+    preferred_checkpoints = [
         (model_root / "components.pt", "Electronics"),
         (model_root / "iot_components.pt", "IoT Components"),
         (model_root / "iot_boards.pt", "IoT Boards"),
     ]
-    checkpoint_paths = [(path, label) for path, label in checkpoint_paths if path.is_file()]
+    checkpoint_paths = [
+        (path, label) for path, label in preferred_checkpoints if path.is_file()
+    ][:1]
 
     if not checkpoint_paths and not api_key:
         st.error(
@@ -47,11 +51,15 @@ def render_live_webcam_detection(
         try:
             from ultralytics import YOLO  # noqa: F401
         except ImportError:
-            st.error(
-                "Local YOLO checkpoints exist, but Ultralytics is not installed. "
-                "Install the training/inference dependency with: python -m pip install ultralytics"
-            )
-            return
+            # Hosted Streamlit deployments may intentionally omit Ultralytics to
+            # keep the OpenCV runtime light. Prefer hosted inference in that case.
+            checkpoint_paths = []
+            if not api_key:
+                st.error(
+                    "Local model files exist, but Ultralytics is not installed and "
+                    "ROBOFLOW_API_KEY is unavailable. Install Ultralytics locally or configure the Streamlit secret."
+                )
+                return
 
     confidence = st.slider(
         "Detection confidence",
@@ -106,7 +114,7 @@ def render_live_webcam_detection(
                         result = model.predict(
                             source=image,
                             conf=float(confidence),
-                            imgsz=640,
+                            imgsz=320,
                             verbose=False,
                         )[0]
                         boxes = result.boxes
