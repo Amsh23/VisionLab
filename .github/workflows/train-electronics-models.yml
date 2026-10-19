@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/train-electronics-models.yml"
+      - "scripts/train_models_ci.py"
+      - "scripts/train_components_yolo.py"
   workflow_dispatch:
     inputs:
       task:
@@ -25,7 +27,7 @@ permissions:
 
 concurrency:
   group: visionlab-model-training-v3
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   train-and-publish:
