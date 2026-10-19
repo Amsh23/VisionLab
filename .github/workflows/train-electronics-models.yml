@@ -1,8 +1,7 @@
 name: Train VisionLab Models
 
 on:
-  # Model training is manual because it is CPU-intensive. Ordinary code pushes
-  # run the lightweight CI workflow, not a full dataset download and retrain.
+  # Training is manual; CI runs separately on code pushes and pull requests.
   workflow_dispatch:
     inputs:
       task:
@@ -27,10 +26,8 @@ jobs:
   train-and-publish:
     name: Download datasets, train and publish models
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
+      env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
-      VISIONLAB_TRAIN_BUDGET_MIN: "45"
       # VISIONLAB_DETECT_MODEL: yolo11n.pt
     steps:
       - uses: actions/checkout@v7
