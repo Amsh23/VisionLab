@@ -149,7 +149,6 @@ def render_live_webcam_detection(
                             self.hosted_detections = detections
                             self.hosted_error = "; ".join(errors)
 
-                    image_height, image_width = image.shape[:2]
                     for item in self.hosted_detections:
                         score = float(item["confidence"])
                         if score < float(confidence):
@@ -158,10 +157,10 @@ def render_live_webcam_detection(
                         center_y = float(item["y"])
                         box_width = float(item["width"])
                         box_height = float(item["height"])
-                        x1 = (center_x - box_width / 2) * image_width
-                        y1 = (center_y - box_height / 2) * image_height
-                        x2 = (center_x + box_width / 2) * image_width
-                        y2 = (center_y + box_height / 2) * image_height
+                        x1 = center_x - box_width / 2
+                        y1 = center_y - box_height / 2
+                        x2 = center_x + box_width / 2
+                        y2 = center_y + box_height / 2
                         self._draw_box(
                             annotated, x1, y1, x2, y2,
                             f"{item.get('model_label', 'Component')}: {item['class']}",
