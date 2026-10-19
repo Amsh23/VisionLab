@@ -27,10 +27,10 @@ jobs:
   train-and-publish:
     name: Download datasets, train and publish models
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
     env:
       ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
-      VISIONLAB_TRAIN_BUDGET_MIN: "150"
+      VISIONLAB_TRAIN_BUDGET_MIN: "45"
       # VISIONLAB_DETECT_MODEL: yolo11n.pt
     steps:
       - uses: actions/checkout@v7

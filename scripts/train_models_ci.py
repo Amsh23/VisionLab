@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 MODELS = ROOT / "models"
 PYTHON = sys.executable
-TRAIN_BUDGET_MIN = max(1, int(os.environ.get("VISIONLAB_TRAIN_BUDGET_MIN", "150")))
+TRAIN_BUDGET_MIN = max(1, int(os.environ.get("VISIONLAB_TRAIN_BUDGET_MIN", "45")) )
 TRAIN_STARTED = time.monotonic()
 
 
@@ -99,9 +99,11 @@ def train_yolo(data_file: Path, output: Path, name: str, epochs: int, segmentati
     run_command([
         PYTHON, "scripts/train_components_yolo.py",
         "--data", str(data_file),
-        "--model", "yolo11s-seg.pt" if segmentation else "yolo11s.pt",
+        "--model", "yolo11n-seg.pt" if segmentation else "yolo11n.pt",
         "--epochs", str(epochs),
-        "--imgsz", "640",
+        "--imgsz", "416",
+        "--fraction", "0.25",
+        "--workers", "2",
         "--batch", "4" if segmentation else "8",
         "--device", "cpu",
         "--project", f"runs/{name}",
@@ -135,7 +137,7 @@ def train_electronics(report: dict) -> None:
         data_file,
         MODELS / "components.pt",
         "electronics",
-        epochs=60,
+        epochs=12,
         segmentation=False,
     )
     report["models"].append({
@@ -203,7 +205,7 @@ def train_iot(report: dict) -> None:
         data_file,
         model_path,
         "iot",
-        epochs=60 if dataset_name == "Roboflow IoT_Dataset" else 40,
+        epochs=12 if dataset_name == "Roboflow IoT_Dataset" else 10,
         segmentation=False,
     )
     report["models"].append({
@@ -262,7 +264,7 @@ def train_resistor_colors(report: dict) -> None:
             data_file,
             MODELS / "resistor_seg.pt",
             "resistor-color-bands",
-            epochs=30,
+            epochs=8,
             segmentation=True,
         )
         report["models"].append({
@@ -297,7 +299,7 @@ def train_resistor_colors(report: dict) -> None:
             data_file,
             MODELS / "resistor_value_seg.pt",
             "resistor-value-segmentation",
-            epochs=12,
+            epochs=8,
             segmentation=True,
         )
         report["models"].append({

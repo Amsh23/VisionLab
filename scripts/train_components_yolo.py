@@ -15,9 +15,11 @@ def main() -> None:
     )
     parser.add_argument("--data", type=Path, default=Path("data/component_dataset/data.yaml"))
     parser.add_argument("--model", default="yolo11n.pt", help="Initial Ultralytics model, e.g. yolo11n.pt or yolov8n.pt")
-    parser.add_argument("--epochs", type=int, default=40)
-    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--epochs", type=int, default=12)
+    parser.add_argument("--imgsz", type=int, default=416)
     parser.add_argument("--batch", type=int, default=8)
+    parser.add_argument("--fraction", type=float, default=0.25, help="Fraction of the dataset used for faster lightweight training.")
+    parser.add_argument("--workers", type=int, default=2, help="Data-loader workers.")
     parser.add_argument("--device", default=None, help="Optional device, e.g. cpu, 0, or 0,1")
     parser.add_argument("--project", default="runs/component_detection")
     parser.add_argument("--name", default="electronics_components")
@@ -29,7 +31,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.epochs < 1 or args.imgsz < 32 or args.batch < 1:
+    if args.epochs < 1 or args.imgsz < 32 or args.batch < 1 or not 0 < args.fraction <= 1 or args.workers < 0:
         parser.error("--epochs and --batch must be positive; --imgsz must be at least 32.")
     data_path = args.data.expanduser().resolve()
     if not data_path.is_file():
@@ -81,8 +83,10 @@ def main() -> None:
         "batch": args.batch,
         "project": args.project,
         "name": args.name,
-        "patience": 10,
-        "plots": True,
+        "patience": 4,
+        "plots": False,
+        "fraction": args.fraction,
+        "workers": args.workers,
     }
     if args.device:
         train_options["device"] = args.device
